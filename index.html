@@ -27,14 +27,22 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
             #console {
                 font-family: 'logging';
             }
-            @keyframes keyframes {
-                from { opacity: 1; }
-                to { opacity: 1; }
+            .container {
+                overflow: hidden;
+                content-visibility: auto;
+                transform: translateZ(0);
+                position: relative;
+                width: 200px;
+                height: 200px;
             }
-            cite {
-                animation: keyframes 100ms infinite;
-                display: block; /* Ensure cite is visible */
-                opacity: 1;
+            .child {
+                width: 100px;
+                height: 100px;
+                position: absolute;
+                top: 0;
+                left: 0;
+                background: blue;
+                transform: translateZ(0);
             }
             button {
                 margin-top: 20px;
@@ -55,10 +63,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
         source code and license.<br>
         <button id="button">Trigger Exploit</button>
         <div id="status">Waiting...</div>
-        <object type="image/png">
-            <cite>Exploit Element</cite>
-            <dl hidden></dl>
-        </object>
+        <div class="container">
+            <div class="child"></div>
+        </div>
         <pre id='console'></pre>
     </body>
     <script src="payload.js"></script>
