@@ -56,4 +56,19 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
     </body>
     <script src="payload.js"></script>
     <script type='module' src='./alert.mjs'></script>
+    <script type='module'>
+        import { main } from './psfree.mjs';
+        import { log } from './module/utils.mjs';
+
+        document.getElementById('button').addEventListener('click', async () => {
+            try {
+                document.getElementById('status').textContent = 'Running exploit...';
+                await main();
+                document.getElementById('status').textContent = 'Exploit completed!';
+            } catch (e) {
+                document.getElementById('status').textContent = 'Error: Exploit failed.';
+                log('Error occurred: ' + e.message);
+            }
+        });
+    </script>
 </html>
