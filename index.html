@@ -27,6 +27,17 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
             #console {
                 font-family: 'logging';
             }
+            @keyframes keyframes {}
+            cite { animation: keyframes 100ms; }
+            button {
+                margin-top: 20px;
+                padding: 10px;
+                font-size: 16px;
+            }
+            #status {
+                margin-top: 10px;
+                font-weight: bold;
+            }
         </style>
     </head>
     <body>
@@ -35,6 +46,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
         86Fk3X9AE94EGKidzRbvyiVgGNYD3qZnuKNq1ZbsomFWXHYm6TtAgz9GNGitPWadkS3Wr9uXoT29U1SfdMtJ7QNKQpW1CVS<br>
         See <a href='./about.html' data-jslicense='1'>JavaScript license information</a> for the
         source code and license.<br>
+        <button id="button">Trigger Exploit</button>
+        <div id="status">Waiting...</div>
+        <object type="image/png">
+            <cite></cite>
+            <dl hidden></dl>
+        </object>
         <pre id='console'></pre>
     </body>
     <script src="payload.js"></script>
