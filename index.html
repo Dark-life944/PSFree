@@ -69,5 +69,17 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
         <pre id='console'></pre>
     </body>
     <script src="payload.js"></script>
-    <script type='module' src='./alert.mjs'></script>
+    <script>
+        document.getElementById('button').addEventListener('click', () => {
+            const status = document.getElementById('status');
+            status.textContent = 'Loading exploit...';
+            // Dynamically load alert.mjs
+            import('./alert.mjs').then(module => {
+                status.textContent = 'Running exploit...';
+            }).catch(error => {
+                status.textContent = 'Error: Failed to load exploit.';
+                alert(`Failed to load alert.mjs: ${error.message}`);
+            });
+        });
+    </script>
 </html>
