@@ -15,12 +15,12 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
-// We can't just open a console on the ps4 browser, make sure the errors thrown
+// We can't just open a console on the PS4 browser, make sure the errors thrown
 // by our program are alerted.
 
 // We don't use a custom logging function to avoid a dependency on a logging
 // module since we want this file to stand alone. We don't want to copy the
-// log function here either for the sake avoiding dependencies since using
+// log function here either for the sake of avoiding dependencies since using
 // alert() is good enough.
 
 // We log the line and column numbers as well since some exceptions (like
@@ -47,6 +47,13 @@ addEventListener('error', event => {
     return true;
 });
 
-// we have to dynamically import the program if we want to catch its syntax
-// errors
-import('./psfree.mjs');
+// Dynamically import psfree.mjs and call main
+import { main } from './psfree.mjs';
+
+(async () => {
+    try {
+        await main();
+    } catch (error) {
+        alert(`Error in main: ${error.message}\n${error.stack}`);
+    }
+})();
