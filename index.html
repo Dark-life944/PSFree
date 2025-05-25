@@ -27,8 +27,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
             #console {
                 font-family: 'logging';
             }
-            @keyframes keyframes {}
-            cite { animation: keyframes 100ms; }
+            @keyframes keyframes {
+                from { opacity: 1; }
+                to { opacity: 1; }
+            }
+            cite {
+                animation: keyframes 100ms infinite;
+                display: block; /* Ensure cite is visible */
+                opacity: 1;
+            }
             button {
                 margin-top: 20px;
                 padding: 10px;
@@ -49,7 +56,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
         <button id="button">Trigger Exploit</button>
         <div id="status">Waiting...</div>
         <object type="image/png">
-            <cite></cite>
+            <cite>Exploit Element</cite>
             <dl hidden></dl>
         </object>
         <pre id='console'></pre>
