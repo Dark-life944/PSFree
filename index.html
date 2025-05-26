@@ -41,7 +41,7 @@
 
         function sprayHeap() {
             const arrays = [];
-            for (let i = 0; i < 15000; i++) {
+            for (let i = 0; i < 20000; i++) {
                 const buf = new Uint8Array(4096);
                 buf.fill(0x42); // Fill with 'B'
                 arrays.push(buf);
@@ -82,7 +82,7 @@
                     console.error(`Error: ${err.message}`);
                     status.textContent = 'Failed: Error occurred.';
                 }
-            }, 50);
+            }, 25);
         }
 
         const observer = new MutationObserver(() => {
