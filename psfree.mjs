@@ -55,7 +55,7 @@ function checkImageDataUAF(imageData, ctx) {
     try {
         const current = new BufferView(ctx.getImageData(0, 0, 512, 512).data.buffer);
         for (let i = 0; i < original.byteLength; i++) {
-            if (original.read8(i) !== current.read8(i)) {
+            if (original[i] !== current[i]) {
                 return { detected: true, view: current };
             }
         }
@@ -137,7 +137,7 @@ export async function main(ctx, status) {
             const refImageData = ctx.createImageData(512, 512);
             const refView = new BufferView(refImageData.data.buffer);
             for (let i = 0; i < refView.byteLength; i++) {
-                refView.write8(i, 0x46);
+                refView[i] = 0x46; // Use direct assignment instead of write8
             }
 
             // Create CodeBlock
