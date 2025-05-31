@@ -1,104 +1,42 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebKit CloneDeserializer UAF PoC (PS4 9.00)</title>
-    <style>
-        #trigger {
-            margin: 20px 0;
-            padding: 12px;
-            font-size: 18px;
-            cursor: pointer;
-        }
-        #status {
-            margin-top: 10px;
-            font-weight: bold;
-            color: darkgreen;
-        }
-        #container {
-            display: none;
-        }
-    </style>
-</head>
-<body>
-    <h1>WebKit CloneDeserializer UAF PoC (PS4 9.00)</h1>
-    <p>Click to trigger the PoC. Expect a crash or UAF detection.</p>
-    <button id="trigger">Trigger PoC</button>
-    <div id="status">Idle...</div>
-    <div id="container"></div>
-    <script>
-        const container = document.getElementById('container');
-        const status = document.getElementById('status');
-        let attemptCount = 0;
+<!-- Copyright (C) 2023-2025 anonymous
 
-        function stressGC() {
-            for (let i = 0; i < 300; i++) {
-                new ArrayBuffer(1024 * 1024);
+This file is part of PSFree.
+
+PSFree is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+PSFree is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+-->
+<html>
+    <head>
+        <meta charset='utf-8'>
+        <title>PSFree-Lapse Exploit For 9.00</title>
+        <style>
+            @font-face {
+                font-family: 'logging';
+                src: url('fonts/LiberationMono-Regular.ttf');
             }
-        }
-
-        function triggerExploit() {
-            attemptCount++;
-            status.textContent = `Attempt ${attemptCount} in progress...`;
-
-            try {
-                const arrayBuffer = new ArrayBuffer(2048);
-                const messagePort = new MessageChannel().port1;
-                const complexObject = {
-                    buffer: arrayBuffer,
-                    array: new Uint8Array(500),
-                    nested: { x: new ArrayBuffer(256) }
-                };
-
-                const iframe = document.createElement('iframe');
-                container.appendChild(iframe);
-                const iframeWindow = iframe.contentWindow;
-
-                iframeWindow.postMessage(structuredClone(complexObject, {
-                    transfer: [arrayBuffer, messagePort]
-                }), '*');
-
-                setTimeout(() => {
-                    const testBuf = new Uint8Array(4096);
-                    testBuf.fill(0x46);
-                    if (testBuf[0] !== 0x46) {
-                        status.textContent = 'Early UAF detected!';
-                        return;
-                    }
-                    const testBuf2 = new Uint8Array(4096);
-                    testBuf2.fill(0x47);
-                    if (testBuf2[0] !== 0x47) {
-                        status.textContent = 'Second UAF detected!';
-                        return;
-                    }
-                    stressGC();
-                    status.textContent = 'Exploit attempted (no heap spray)!';
-                    container.removeChild(iframe);
-                }, 150);
-            } catch (err) {
-                console.error(`Error: ${err.message}`);
-                status.textContent = 'Failed: Error occurred.';
+            #console {
+                font-family: 'logging';
             }
-        }
-
-        const observer = new MutationObserver(() => {
-            triggerExploit();
-        });
-
-        observer.observe(container, { childList: true, subtree: true });
-
-        document.getElementById('trigger').addEventListener('click', () => {
-            try {
-                triggerExploit();
-            } catch (err) {
-                console.error(`Error: ${err.message}`);
-                status.textContent = 'Failed: Error occurred.';
-            }
-        });
-
-        window.addEventListener('message', (event) => {
-        });
-    </script>
-</body>
+        </style>
+    </head>
+    <body>
+        PSFree: A PS4/PS5 Exploit Chain<br>
+        Donation (Monero/XMR):<br>
+        86Fk3X9AE94EGKidzRbvyiVgGNYD3qZnuKNq1ZbsomFWXHYm6TtAgz9GNGitPWadkS3Wr9uXoT29U1SfdMtJ7QNKQpW1CVS<br>
+        See <a href='./about.html' data-jslicense='1'>JavaScript license information</a> for the
+        source code and license.<br>
+        <pre id='console'></pre>
+    </body>
+    <script src="payload.js"></script>
+    <script type='module' src='./alert.mjs'></script>
 </html>
