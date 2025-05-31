@@ -1,46 +1,154 @@
-<!-- this test passes if it doesn't crash -->
-<script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AnimationEffectTiming ASAN PoC (PS4/PS5?)</title>
+    <style>
+        #trigger {
+            margin: 20px 0;
+            padding: 12px;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        #status {
+            margin-top: 10px;
+            font-weight: bold;
+            color: darkred;
+        }
+        #console {
+            margin-top: 10px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+        #target {
+            width: 100px;
+            height: 100px;
+            background: red;
+        }
+    </style>
+</head>
+<body>
+    <h1>AnimationEffectTiming ASAN PoC</h1>
+    <p>Click to test ASAN issue in AnimationEffectTiming::getBasicTiming.</p>
+    <button id="trigger">TEST ANIMATION</button>
+    <div id="status">Idle...</div>
+    <div id="console"></div>
+    <div id="target"></div>
+    <script>
+        const status = document.getElementById('status');
+        const consoleDiv = document.getElementById('console');
+        let attemptCount = 0;
 
-if (window.testRunner)
-    window.testRunner.dumpAsText();
+        function log(msg) {
+            consoleDiv.append(msg + '\n');
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
 
-var myFeedback = [];
-function UpdateFeedback(line, res) { myFeedback.push([line, res]) }
+        function stressGC() {
+            for (let i = 0; i < 1000; i++) {
+                new ArrayBuffer(1024 * 1024);
+            }
+            for (let i = 0; i < 200; i++) {
+                new ArrayBuffer(2 * 1024 * 1024);
+            }
+        }
 
-var runcount = {'jsfuzzer':0, 'eventhandler1':0, 'eventhandler2':0, 'eventhandler3':0, 'eventhandler4':0, 'eventhandler5':0}
+        function checkMemoryChanges() {
+            const buffer = new ArrayBuffer(4096);
+            const view = new Uint8Array(buffer);
+            for (let i = 0; i < view.length; i++) {
+                view[i] = 0x46;
+            }
+            return () => {
+                let changes = 0;
+                const changesMap = new Map();
+                for (let i = 0; i < view.length; i++) {
+                    if (view[i] !== 0x46) {
+                        changes++;
+                        const key = `0x46->0x${view[i].toString(16).padStart(2, '0')}`;
+                        changesMap.set(key, (changesMap.get(key) || 0) + 1);
+                    }
+                }
+                return { changes, changes: [...changesMap] };
+            };
+        }
 
-function GetVariable(fuzzervars, var_type) { if(fuzzervars[var_type]) { return fuzzervars[var_type]; } else { return null; }}
+        async function detectAnimationIssue() {
+            attemptCount++;
+            status.textContent = `Attempt ${attemptCount} in progress...`;
+            log(`Attempt ${attemptCount} started`);
 
-function SetVariable(fuzzervars, var_name, var_type) { fuzzervars[var_type] = var_name; }
+            try {
+                // Create memory checker
+                const check = checkMemoryChanges();
 
-function jsfuzzer() {
+                // Create animation
+                const target = document.getElementById('target');
+                const keyframes = { transform: ['translateX(0)', 'translateX(100px)'] };
+                const effect = new KeyframeEffect(target, keyframes, { duration: 1000 });
+                const timeline = document.timeline; // Use default timeline
+                const animation = new Animation(effect, timeline);
 
-runcount["jsfuzzer"]++; if(runcount["jsfuzzer"] > 2) { return; }
+                // Trigger animation and manipulate
+                const interval = setInterval(() => {
+                    try {
+                        animation.play();
+                        animation.finish();
+                        effect.getComputedTiming(); // Trigger getBasicTiming
+                        target.replaceChildren('test'); // Manipulate DOM
+                        stressGC();
+                    } catch (e) {
+                        log(`Error in animation: ${e.message}`);
+                    }
+                }, 10);
 
-var fuzzervars = {};
+                // Check for memory changes or crash
+                setTimeout(() => {
+                    clearInterval(interval);
+                    try {
+                        effect.getComputedTiming();
+                    } catch (e) {
+                        log(`Error in getComputedTiming: ${e.message}`);
+                    }
+                    const result = check();
+                    if (result.changes > 0) {
+                        status.textContent = `Issue detected! ${result.changes} bytes changed`;
+                        log(`Issue detected! ${result.changes} bytes changed`);
+                        log(`Changes: ${result.changes.map(([k, v]) => `${k} (${v} bytes)`).join(', ')}`);
+                    } else {
+                        stressGC();
+                        setTimeout(() => {
+                            const secondResult = check();
+                            if (secondResult.changes > 0) {
+                                status.textContent = `Issue detected after GC! ${secondResult.changes} bytes changed`;
+                                log(`Issue detected after GC! ${secondResult.changes} bytes changed`);
+                                log(`Changes: ${secondResult.changes.map(([k, v]) => `${k} (${v} bytes)`).join(', ')}`);
+                            } else {
+                                status.textContent = 'No issue detected';
+                                log('No issue detected');
+                            }
+                        }, 10);
+                    }
+                }, 2000);
+            } catch (err) {
+                status.textContent = `Failed: ${err.message}`;
+                log(`Error: ${err.message}`);
+            }
+        }
 
-SetVariable(fuzzervars, window, 'Window');
-SetVariable(fuzzervars, document, 'Document');
-try { if (!var00001) { var00001 = GetVariable(fuzzervars, 'GPUTextureFormat'); } else { SetVariable(fuzzervars, var00001, 'GPUTextureFormat');  };  UpdateFeedback(String.raw`if (!var00001) { var00001 = GetVariable(fuzzervars, 'GPUTextureFormat'); } else { SetVariable(fuzzervars, var00001, 'GPUTextureFormat');  }`, "Valid"); } catch(e) {  UpdateFeedback(String.raw`if (!var00001) { var00001 = GetVariable(fuzzervars, 'GPUTextureFormat'); } else { SetVariable(fuzzervars, var00001, 'GPUTextureFormat');  }`, e.name) }
-try { window.releaseEvents();;  UpdateFeedback(String.raw`window.releaseEvents();`, "Valid"); } catch(e) {  UpdateFeedback(String.raw`window.releaseEvents();`, e.name) }
-try { /* newvar{var00025:Element} */ var var00025 = document.firstElementChild;;  UpdateFeedback(String.raw`/* newvar{var00025:Element} */ var var00025 = document.firstElementChild;`, "Valid"); } catch(e) {  UpdateFeedback(String.raw`/* newvar{var00025:Element} */ var var00025 = document.firstElementChild;`, e.name) }
-try { if (!var00025) { var00025 = GetVariable(fuzzervars, 'Element'); } else { SetVariable(fuzzervars, var00025, 'Element'); SetVariable(fuzzervars, var00025, 'Node;');  };  UpdateFeedback(String.raw`if (!var00025) { var00025 = GetVariable(fuzzervars, 'Element'); } else { SetVariable(fuzzervars, var00025, 'Element'); SetVariable(fuzzervars, var00025, 'Node;');  }`, "Valid"); } catch(e) {  UpdateFeedback(String.raw`if (!var00025) { var00025 = GetVariable(fuzzervars, 'Element'); } else { SetVariable(fuzzervars, var00025, 'Element'); SetVariable(fuzzervars, var00025, 'Node;');  }`, e.name) }
-try { /* newvar{var00023:Element} */ var var00023 = var00024.activeElement;;  UpdateFeedback(String.raw`/* newvar{var00023:Element} */ var var00023 = var00024.activeElement;`, "Valid"); } catch(e) {  UpdateFeedback(String.raw`/* newvar{var00023:Element} */ var var00023 = var00024.activeElement;`, e.name) }
-try { if (!var00023) { var00023 = GetVariable(fuzzervars, 'Element'); } else { SetVariable(fuzzervars, var00023, 'Element'); SetVariable(fuzzervars, var00023, 'Node;');  };  UpdateFeedback(String.raw`if (!var00023) { var00023 = GetVariable(fuzzervars, 'Element'); } else { SetVariable(fuzzervars, var00023, 'Element'); SetVariable(fuzzervars, var00023, 'Node;');  }`, "Valid"); } catch(e) {  UpdateFeedback(String.raw`if (!var00023) { var00023 = GetVariable(fuzzervars, 'Element'); } else { SetVariable(fuzzervars, var00023, 'Element'); SetVariable(fuzzervars, var00023, 'Node;');  }`, e.name) }
-try { /* newvar{var00031:PressureUpdateCallback} */ var var00031 = function(x){console.log("ok")};;  UpdateFeedback(String.raw`/* newvar{var00031:PressureUpdateCallback} */ var var00031 = function(x){console.log("ok")};`, "Valid"); } catch(e) {  UpdateFeedback(String.raw`/* newvar{var00031:PressureUpdateCallback} */ var var00031 = function(x){console.log("ok")};`, e.name) }
-try { /* newvar{var00027:object} */ var var00027 = var00028.toJSON();;  UpdateFeedback(String.raw`/* newvar{var00027:object} */ var var00027 = var00028.toJSON();`, "Valid"); } catch(e) {  UpdateFeedback(String.raw`/* newvar{var00027:object} */ var var00027 = var00028.toJSON();`, e.name) }
-try { /* newvar{var00022:KeyframeEffect} */ var var00022 = new KeyframeEffect(var00023,var00027);;  UpdateFeedback(String.raw`/* newvar{var00022:KeyframeEffect} */ var var00022 = new KeyframeEffect(var00023,var00027);`, "Valid"); } catch(e) {  UpdateFeedback(String.raw`/* newvar{var00022:KeyframeEffect} */ var var00022 = new KeyframeEffect(var00023,var00027);`, e.name) }
-try { /* newvar{var00021:AnimationEffect} */ var var00021 = var00022;;  UpdateFeedback(String.raw`/* newvar{var00021:AnimationEffect} */ var var00021 = var00022;`, "Valid"); } catch(e) {  UpdateFeedback(String.raw`/* newvar{var00021:AnimationEffect} */ var var00021 = var00022;`, e.name) }
-try { if (!var00021) { var00021 = GetVariable(fuzzervars, 'AnimationEffect'); } else { SetVariable(fuzzervars, var00021, 'AnimationEffect');  };  UpdateFeedback(String.raw`if (!var00021) { var00021 = GetVariable(fuzzervars, 'AnimationEffect'); } else { SetVariable(fuzzervars, var00021, 'AnimationEffect');  }`, "Valid"); } catch(e) {  UpdateFeedback(String.raw`if (!var00021) { var00021 = GetVariable(fuzzervars, 'AnimationEffect'); } else { SetVariable(fuzzervars, var00021, 'AnimationEffect');  }`, e.name) }
-try { /* newvar{var00019:AnimationEffect} */ var var00019 = var00020.firstChild;;  UpdateFeedback(String.raw`/* newvar{var00019:AnimationEffect} */ var var00019 = var00020.firstChild;`, "Valid"); } catch(e) {  UpdateFeedback(String.raw`/* newvar{var00019:AnimationEffect} */ var var00019 = var00020.firstChild;`, e.name) }
-try { if (!var00019) { var00019 = GetVariable(fuzzervars, 'AnimationEffect'); } else { SetVariable(fuzzervars, var00019, 'AnimationEffect');  };  UpdateFeedback(String.raw`if (!var00019) { var00019 = GetVariable(fuzzervars, 'AnimationEffect'); } else { SetVariable(fuzzervars, var00019, 'AnimationEffect');  }`, "Valid"); } catch(e) {  UpdateFeedback(String.raw`if (!var00019) { var00019 = GetVariable(fuzzervars, 'AnimationEffect'); } else { SetVariable(fuzzervars, var00019, 'AnimationEffect');  }`, e.name) }
-try { /* newvar{var00033:ScrollTimeline} */ var var00033 = new ScrollTimeline();;  UpdateFeedback(String.raw`/* newvar{var00033:ScrollTimeline} */ var var00033 = new ScrollTimeline();`, "Valid"); } catch(e) {  UpdateFeedback(String.raw`/* newvar{var00033:ScrollTimeline} */ var var00033 = new ScrollTimeline();`, e.name) }
-try { /* newvar{var00032:AnimationTimeline} */ var var00032 = var00033;;  UpdateFeedback(String.raw`/* newvar{var00032:AnimationTimeline} */ var var00032 = var00033;`, "Valid"); } catch(e) {  UpdateFeedback(String.raw`/* newvar{var00032:AnimationTimeline} */ var var00032 = var00033;`, e.name) }
-try { /* newvar{var00018:Animation} */ var var00018 = new Animation(var00019,var00032);;  UpdateFeedback(String.raw`/* newvar{var00018:Animation} */ var var00018 = new Animation(var00019,var00032);`, "Valid"); } catch(e) {  UpdateFeedback(String.raw`/* newvar{var00018:Animation} */ var var00018 = new Animation(var00019,var00032);`, e.name) }
-try { var00018.finish();;  UpdateFeedback(String.raw`var00018.finish();`, "Valid"); } catch(e) {  UpdateFeedback(String.raw`var00018.finish();`, e.name) }
-try { /* newvar{var00395:union_Node1DOMString_} */ var var00395 = String.fromCharCode(120, 92, 51, 86, 32, 81, 57, 63, 39, 65, 32, 81, 116, 65, 37, 39, 49, 116, 74, 107);;  UpdateFeedback(String.raw`/* newvar{var00395:union_Node1DOMString_} */ var var00395 = String.fromCharCode(120, 92, 51, 86, 32, 81, 57, 63, 39, 65, 32, 81, 116, 65, 37, 39, 49, 116, 74, 107);`, "Valid"); } catch(e) {  UpdateFeedback(String.raw`/* newvar{var00395:union_Node1DOMString_} */ var var00395 = String.fromCharCode(120, 92, 51, 86, 32, 81, 57, 63, 39, 65, 32, 81, 116, 65, 37, 39, 49, 116, 74, 107);`, e.name) }
-try { var00025.replaceChildren(var00395);;  UpdateFeedback(String.raw`var00025.replaceChildren(var00395);`, "Valid"); } catch(e) {  UpdateFeedback(String.raw`var00025.replaceChildren(var00395);`, e.name) }
-}
-</script>
-<body onload=jsfuzzer()>
+        document.getElementById('trigger').addEventListener('click', async () => {
+            try {
+                await detectAnimationIssue();
+            } catch (err) {
+                status.textContent = `Failed: ${err.message}`;
+                log(`Error: ${err.message}`);
+            }
+        });
+    </script>
 </body>
+</html>
