@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Canvas UAF Exploit PoC (PS4 9.00)</title>
+    <title>WebRTC Support Check (PS4/PS5?)</title>
     <style>
         #trigger {
             margin: 20px 0;
@@ -20,34 +20,77 @@
             margin-top: 10px;
             white-space: pre-wrap;
             font-family: monospace;
-        }
-        #canvas {
-            display: none;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
         }
     </style>
 </head>
 <body>
-    <h1>Canvas UAF Exploit PoC (PS4 9.00)</h1>
-    <p>Click to trigger the exploit. Expect crash, leak, or memory write.</p>
-    <button id="trigger">Trigger Exploit</button>
+    <h1>WebRTC Support Check</h1>
+    <p>Click to check if WebRTC is enabled.</p>
+    <button id="trigger">CHECK WEBRTC</button>
     <div id="status">Idle...</div>
     <div id="console"></div>
-    <canvas id="canvas" width="512" height="512"></canvas>
-    <script type="module">
-        import { main } from './psfree.mjs';
-
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
+    <script>
         const status = document.getElementById('status');
+        const consoleDiv = document.getElementById('console');
 
-        document.getElementById('trigger').addEventListener('click', async () => {
+        function log(msg) {
+            consoleDiv.append(msg + '\n');
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+
+        function checkWebRTC() {
+            status.textContent = 'Checking WebRTC support...';
+            log('Starting WebRTC support check...');
+
             try {
-                await main(ctx, status);
+                // Check RTCPeerConnection
+                const rtcPeerConnection = window.RTCPeerConnection || window.webkitRTCPeerConnection;
+                if (rtcPeerConnection) {
+                    log('RTCPeerConnection is available.');
+                    try {
+                        const pc = new rtcPeerConnection({ iceServers: [] });
+                        log('RTCPeerConnection instantiated successfully.');
+                        pc.close();
+                    } catch (e) {
+                        log(`RTCPeerConnection instantiation failed: ${e.message}`);
+                    }
+                } else {
+                    log('RTCPeerConnection is NOT available.');
+                }
+
+                // Check getUserMedia
+                const getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia;
+                if (getUserMedia) {
+                    log('getUserMedia is available.');
+                    navigator.getUserMedia(
+                        { video: true, audio: true },
+                        () => log('getUserMedia succeeded.'),
+                        (e) => log(`getUserMedia failed: ${e.message}`)
+                    );
+                } else {
+                    log('getUserMedia is NOT available.');
+                }
+
+                // Check MediaStream
+                if (window.MediaStream) {
+                    log('MediaStream interface is available.');
+                } else {
+                    log('MediaStream interface is NOT available.');
+                }
+
+                status.textContent = 'WebRTC check completed. See console for details.';
+                log('WebRTC check completed.');
             } catch (err) {
-                console.error(`Error: ${err.message}`);
-                status.textContent = `Failed: ${err.message}`;
+                status.textContent = `Error: ${err.message}`;
+                log(`Error: ${err.message}`);
             }
-        });
+        }
+
+        document.getElementById('trigger').addEventListener('click', checkWebRTC);
     </script>
 </body>
 </html>
