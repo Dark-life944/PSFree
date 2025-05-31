@@ -1,42 +1,53 @@
-<!-- Copyright (C) 2023-2025 anonymous
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canvas UAF Exploit PoC (PS4 9.00)</title>
+    <style>
+        #trigger {
+            margin: 20px 0;
+            padding: 12px;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        #status {
+            margin-top: 10px;
+            font-weight: bold;
+            color: darkred;
+        }
+        #console {
+            margin-top: 10px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        #canvas {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Canvas UAF Exploit PoC (PS4 9.00)</h1>
+    <p>Click to trigger the exploit. Expect crash, leak, or memory write.</p>
+    <button id="trigger">Trigger Exploit</button>
+    <div id="status">Idle...</div>
+    <div id="console"></div>
+    <canvas id="canvas" width="512" height="512"></canvas>
+    <script type="module">
+        import { main } from './psfree.mjs';
 
-This file is part of PSFree.
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const status = document.getElementById('status');
 
-PSFree is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-PSFree is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
--->
-<html>
-    <head>
-        <meta charset='utf-8'>
-        <title>PSFree-Lapse Exploit For 9.00</title>
-        <style>
-            @font-face {
-                font-family: 'logging';
-                src: url('fonts/LiberationMono-Regular.ttf');
+        document.getElementById('trigger').addEventListener('click', async () => {
+            try {
+                await main(ctx, status);
+            } catch (err) {
+                console.error(`Error: ${err.message}`);
+                status.textContent = `Failed: ${err.message}`;
             }
-            #console {
-                font-family: 'logging';
-            }
-        </style>
-    </head>
-    <body>
-        PSFree: A PS4/PS5 Exploit Chain<br>
-        Donation (Monero/XMR):<br>
-        86Fk3X9AE94EGKidzRbvyiVgGNYD3qZnuKNq1ZbsomFWXHYm6TtAgz9GNGitPWadkS3Wr9uXoT29U1SfdMtJ7QNKQpW1CVS<br>
-        See <a href='./about.html' data-jslicense='1'>JavaScript license information</a> for the
-        source code and license.<br>
-        <pre id='console'></pre>
-    </body>
-    <script src="payload.js"></script>
-    <script type='module' src='./alert.mjs'></script>
+        });
+    </script>
+</body>
 </html>
