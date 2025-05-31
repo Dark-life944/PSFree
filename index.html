@@ -44,48 +44,51 @@
         }
 
         function stressGC() {
-            for (let i = 0; i < 500; i++) {
+            for (let i = 0; i < 1000; i++) {
                 new ArrayBuffer(1024 * 1024);
             }
-            for (let i = 0; i < 100; i++) {
+            for (let i = 0; i < 200; i++) {
                 new ArrayBuffer(2 * 1024 * 1024);
             }
         }
 
         function changeContentSize() {
-            // Change document body size to trigger setContentsSize
             document.body.style.width = `${Math.random() * 1000 + 500}px`;
             document.body.style.height = `${Math.random() * 1000 + 500}px`;
-            // Force layout
-            document.body.offsetHeight;
+            document.body.offsetHeight; // Force layout
         }
 
         function navigateHistory() {
-            // Push multiple history states
-            for (let i = 0; i < 5; i++) {
+            for (let i = 0; i < 10; i++) {
                 history.pushState({ page: i }, `Page ${i}`, `#page${i}`);
             }
-            // Navigate back to trigger BackForwardCache
             history.back();
         }
 
+        function createIframe() {
+            const iframe = document.createElement('iframe');
+            iframe.src = 'about:blank';
+            document.body.appendChild(iframe);
+            return iframe;
+        }
+
         function checkMemoryChanges() {
-            // Create a test buffer to monitor memory
             const buffer = new ArrayBuffer(4096);
             const view = new Uint8Array(buffer);
             for (let i = 0; i < view.length; i++) {
-                view[i] = 0x46; // Initial pattern
+                view[i] = 0x46;
             }
             return () => {
                 let changes = 0;
-                const newValues = new Set();
+                const changesMap = new Map();
                 for (let i = 0; i < view.length; i++) {
                     if (view[i] !== 0x46) {
                         changes++;
-                        newValues.add(view[i]);
+                        const key = `0x46->0x${view[i].toString(16).padStart(2, '0')}`;
+                        changesMap.set(key, (changesMap.get(key) || 0) + 1);
                     }
                 }
-                return { changes, newValues: [...newValues] };
+                return { changes, changes: [...changesMap] };
             };
         }
 
@@ -97,22 +100,33 @@
             try {
                 // Create memory checker
                 const check = checkMemoryChanges();
+                const iframes = [];
+
+                // Create iframes
+                for (let i = 0; i < 5; i++) {
+                    iframes.push(createIframe());
+                }
 
                 // Stress heap and trigger navigation
                 const interval = setInterval(() => {
                     changeContentSize();
                     navigateHistory();
                     stressGC();
+                    // Remove and recreate iframes
+                    iframes.forEach(iframe => iframe.remove());
+                    for (let i = 0; i < 5; i++) {
+                        iframes.push(createIframe());
+                    }
                 }, 100);
 
-                // Check for memory changes
+                // Check for memory changes or crash
                 setTimeout(() => {
                     clearInterval(interval);
                     const result = check();
                     if (result.changes > 0) {
                         status.textContent = `UAF detected! ${result.changes} bytes changed`;
                         log(`UAF detected! ${result.changes} bytes changed`);
-                        log(`New values: ${result.newValues.map(v => `0x${v.toString(16).padStart(2, '0')}`).join(', ')}`);
+                        log(`Changes: ${result.changes.map(([k, v]) => `${k} (${v} bytes)`).join(', ')}`);
                     } else {
                         stressGC();
                         setTimeout(() => {
@@ -120,14 +134,16 @@
                             if (secondResult.changes > 0) {
                                 status.textContent = `UAF detected after GC! ${secondResult.changes} bytes changed`;
                                 log(`UAF detected after GC! ${secondResult.changes} bytes changed`);
-                                log(`New values: ${secondResult.newValues.map(v => `0x${v.toString(16).padStart(2, '0')}`).join(', ')}`);
+                                log(`Changes: ${secondResult.changes.map(([k, v]) => `${k} (${v} bytes)`).join(', ')}`);
                             } else {
                                 status.textContent = 'No UAF detected';
                                 log('No UAF detected');
                             }
                         }, 10);
                     }
-                }, 1000);
+                    // Clean up iframes
+                    iframes.forEach(iframe => iframe.remove());
+                }, 2000);
             } catch (err) {
                 status.textContent = `Failed: ${err.message}`;
                 log(`Error: ${err.message}`);
