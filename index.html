@@ -1,92 +1,77 @@
 <!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>DOM Append PoC</title>
-    <style>
-        #trigger {
-            margin: 20px;
-            padding: 8px;
-            font-size: 16px;
-            cursor: pointer;
-            background-color: #f44336;
-            color: white;
-            border: none;
-            border-radius: 4px;
-        }
-        #trigger:hover {
-            background-color: #d32f2f;
-        }
-        #output {
-            margin: 20px;
-            font-family: monospace;
-            white-space: pre-wrap;
-        }
-    </style>
-</head>
-<body>
-    <h1>DOM Append PoC</h1>
-    <p>Click to test element.append vulnerability</p>
-    <button id="trigger">Trigger Exploit</button>
-    <div id="output"></div>
-    <script>
-        function stressHeap() {
-            const buffers = [];
-            for (let i = 0; i < 50; i++) {
-                const buf = new Uint8Array(8 * 1024);
-                buf.fill(0x41);
-                buffers.push(buf);
-            }
-            return buffers;
-        }
+<meta charset=utf-8>
+<title>ParentNode.append</title>
+<link rel=help href="https://dom.spec.whatwg.org/#dom-parentnode-append">
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<script src="pre-insertion-validation-hierarchy.js"></script>
+<script>
+preInsertionValidateHierarchy("append");
 
-        function checkMemoryLeak() {
-            const buf = new Uint8Array(4);
-            buf.fill(0x46);
-            return buf[0] !== 0x46 ? `Leak: 0x${buf[0].toString(16)}` : null;
-        }
+function test_append(node, nodeName) {
+    test(function() {
+        const parent = node.cloneNode();
+        parent.append();
+        assert_array_equals(parent.childNodes, []);
+    }, nodeName + '.append() without any argument, on a parent having no child.');
 
-        function log(message) {
-            const output = document.getElementById('output');
-            output.textContent += message + '\n';
-        }
+    test(function() {
+        const parent = node.cloneNode();
+        parent.append(null);
+        assert_equals(parent.childNodes[0].textContent, 'null');
+    }, nodeName + '.append() with null as an argument, on a parent having no child.');
 
-        function triggerExploit() {
-            log('Grooming heap...');
-            stressHeap();
+    test(function() {
+        const parent = node.cloneNode();
+        parent.append(undefined);
+        assert_equals(parent.childNodes[0].textContent, 'undefined');
+    }, nodeName + '.append() with undefined as an argument, on a parent having no child.');
 
-            log('Creating parent and elements...');
-            const parent = document.createElement('div');
-            const x = document.createElement('x');
-            const y = document.createElement('y');
+    test(function() {
+        const parent = node.cloneNode();
+        parent.append('text');
+        assert_equals(parent.childNodes[0].textContent, 'text');
+    }, nodeName + '.append() with only text as an argument, on a parent having no child.');
 
-            log('Appending duplicate elements...');
-            for (let i = 0; i < 1000; i++) {
-                parent.append(x, y, x);
-                if (i % 100 === 0) {
-                    const leak = checkMemoryLeak();
-                    if (leak) {
-                        log(leak);
-                    }
-                }
-            }
+    test(function() {
+        const parent = node.cloneNode();
+        const x = document.createElement('x');
+        parent.append(x);
+        assert_array_equals(parent.childNodes, [x]);
+    }, nodeName + '.append() with only one element as an argument, on a parent having no child.');
 
-            log('Checking parent child nodes...');
-            if (parent.childNodes.length !== 2 || parent.childNodes[0] !== y || parent.childNodes[1] !== x) {
-                log(`Unexpected DOM state: ${parent.childNodes.length} nodes`);
-            } else {
-                log('DOM state as expected');
-            }
+    test(function() {
+        const parent = node.cloneNode();
+        const child = document.createElement('test');
+        parent.appendChild(child);
+        parent.append(null);
+        assert_equals(parent.childNodes[0], child);
+        assert_equals(parent.childNodes[1].textContent, 'null');
+    }, nodeName + '.append() with null as an argument, on a parent having a child.');
 
-            const leak = checkMemoryLeak();
-            if (leak) {
-                log(leak);
-            } else {
-                log('No memory changes detected');
-            }
-        }
+    test(function() {
+        const parent = node.cloneNode();
+        const x = document.createElement('x');
+        const child = document.createElement('test');
+        parent.appendChild(child);
+        parent.append(x, 'text');
+        assert_equals(parent.childNodes[0], child);
+        assert_equals(parent.childNodes[1], x);
+        assert_equals(parent.childNodes[2].textContent, 'text');
+    }, nodeName + '.append() with one element and text as argument, on a parent having a child.');
 
-        document.getElementById('trigger').addEventListener('click', triggerExploit);
-    </script>
-</body>
+    test(function() {
+        const parent = node.cloneNode();
+        const x = document.createElement('x');
+        const y = document.createElement('y');
+        parent.append(x, y, x);
+        assert_equals(parent.childNodes.length, 2);
+        assert_equals(parent.childNodes[0], y);
+        assert_equals(parent.childNodes[1], x);
+    }, nodeName + '.append() with the same element twice.');
+}
+
+test_append(document.createElement('div'), 'Element');
+test_append(document.createDocumentFragment(), 'DocumentFragment');
+</script>
 </html>
