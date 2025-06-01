@@ -1,11 +1,7 @@
-function stressHeap() {
-    const buffers = [];
-    for (let i = 0; i < 20; i++) {
-        const buf = new Uint8Array(4 * 1024);
-        buf.fill(0x41);
-        buffers.push(buf);
+function freememory() {
+    for (var i = 0; i < 1000; i++) {
+        a = new Uint8Array(1024 * 1000);
     }
-    return buffers;
 }
 
 function checkMemoryLeak() {
@@ -17,7 +13,7 @@ function checkMemoryLeak() {
 self.onmessage = function(e) {
     if (e.data === 'start') {
         self.postMessage('Grooming heap...');
-        stressHeap();
+        freememory();
 
         self.postMessage('Opening IndexedDB...');
         for (let i = 0; i < 5000; i++) {
@@ -28,10 +24,10 @@ self.onmessage = function(e) {
             } catch (error) {
                 self.postMessage(`Error at iteration ${i}: ${error.message}`);
             }
-            req = null;
-            ev = null;
+            req = 0;
+            ev = 0;
             if (i % 500 === 0) {
-                stressHeap();
+                freememory();
                 const leak = checkMemoryLeak();
                 if (leak) {
                     self.postMessage(leak);
