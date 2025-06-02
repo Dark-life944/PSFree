@@ -3,18 +3,17 @@
 <head>
     <script>
         async function trigger() {
-            let workerUrl = "./idbworker.js";
-            for (let i = 0; i < 1000; i++) {
+            let workerUrl = "./worker.js";
+            for (let i = 0; i < 200; i++) {
                 try {
                     let worker = new Worker(workerUrl);
                     worker.postMessage("test");
                     worker.onmessage = () => {};
                     worker.terminate();
                 } catch (e) {}
-                let largeObject = new Array(1000000).fill(0);
+                let largeObject = new Array(500000).fill(0);
                 largeObject = null;
             }
-            setTimeout(trigger, 0);
         }
     </script>
 </head>
