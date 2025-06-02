@@ -1,12 +1,3 @@
-function freememory() {
-    for (var i = 0; i < 1000; i++) {
-        a = new Uint8Array(1024*1000);
-    }
-}
-
-let ev = new Event('mine');
-let req = indexedDB.open('db');
-req.dispatchEvent(ev);
-req = 0;
-ev = 0;
-freememory();
+self.onmessage = function(e) {
+    self.postMessage("response");
+};
