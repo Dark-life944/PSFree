@@ -2,30 +2,25 @@
 <html>
 <head>
     <script>
-        async function trigger() {
-            let spray = [];
-            console.log("Starting test...");
-            for (let i = 0; i < 10; i++) {
-                try {
-                    let ab = new ArrayBuffer(0x1000);
-                    let u8 = new Uint8Array(ab);
-                    function call_back() {
-                        return -0x1000;
-                    }
-                    u8.copyWithin(0x20, {valueOf: call_back}, {valueOf: call_back});
-                    spray.push({ ptr: new Array(64).fill(0x41414141), data: new Array(64).fill("test") });
-                } catch (e) {
-                    console.log("Error:", e);
+        function checkResizeSupport() {
+            try {
+                let ab = new ArrayBuffer(0x1000, {maxByteLength: 0x2000});
+                ab.resize(0x800);
+                if (ab.byteLength === 0x800) {
+                    console.log("ArrayBuffer.resize is supported");
+                    alert("ArrayBuffer.resize is supported");
+                } else {
+                    console.log("ArrayBuffer.resize is not supported");
+                    alert("ArrayBuffer.resize is not supported");
                 }
-                let largeObject = new Array(250000).fill(0);
-                largeObject = null;
+            } catch (e) {
+                console.log("ArrayBuffer.resize is not supported: " + e.message);
+                alert("ArrayBuffer.resize is not supported: " + e.message);
             }
-            spray = null;
-            console.log("Test complete");
         }
     </script>
 </head>
 <body>
-    <button id="test" onclick="trigger()">test</button>
+    <button id="test" onclick="checkResizeSupport()">Check Resize Support</button>
 </body>
 </html>
