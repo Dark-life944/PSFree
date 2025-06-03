@@ -4,19 +4,18 @@
     <script>
         function checkResizeSupport() {
             try {
-                let ab = new ArrayBuffer(0x1000, {maxByteLength: 0x2000});
-                ab.resize(0x800);
-                if (ab.byteLength === 0x800) {
-                    console.log("ArrayBuffer.resize is supported");
-                    alert("ArrayBuffer.resize is supported");
-                } else {
-                    console.log("ArrayBuffer.resize is not supported");
-                    alert("ArrayBuffer.resize is not supported");
-                }
-            } catch (e) {
-                console.log("ArrayBuffer.resize is not supported: " + e.message);
-                alert("ArrayBuffer.resize is not supported: " + e.message);
-            }
+  const buffer = new ArrayBuffer(8, { maxByteLength: 16 });
+
+  if (buffer.resizable) {
+    console.log(" Resizable ArrayBuffer is supported!");
+    buffer.resize(12);
+    console.log("New byteLength:", buffer.byteLength);
+  } else {
+    console.log(" Resizable ArrayBuffer is NOT supported (no .resizable property).");
+  }
+} catch (e) {
+  console.log(" RAB or .resize() is NOT supported:", e.message);
+}
         }
     </script>
 </head>
